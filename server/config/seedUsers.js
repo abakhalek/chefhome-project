@@ -113,7 +113,13 @@ export const seedChefProfile = {
       name: "Menu Dégustation Français",
       description: "Un voyage culinaire à travers les régions de France",
       price: 85,
-      courses: ["Amuse-bouche", "Entrée", "Plat principal", "Fromage", "Dessert"],
+      courses: [
+        { name: "Amuse-bouche", order: 1 },
+        { name: "Entrée", order: 2 },
+        { name: "Plat principal", order: 3 },
+        { name: "Fromage", order: 4 },
+        { name: "Dessert", order: 5 }
+      ],
       dietaryOptions: ["vegetarian-option", "gluten-free-option"]
     }]
   },

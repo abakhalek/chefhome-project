@@ -40,14 +40,15 @@ export const useChef = () => {
       const result = await chefService.uploadDocument(documentType, file);
       
       if (profile) {
+         const documentKey = documentType as keyof ChefProfile['documents'];
         setProfile({
           ...profile,
           documents: {
             ...profile.documents,
-            [documentType]: {
-              uploaded: true,
-              url: result.url,
-              uploadedAt: new Date().toISOString()
+            [documentKey]: {
+              uploaded: Boolean(result.url),
+              url: result.url || undefined,
+              uploadedAt: result.uploadedAt || new Date().toISOString()
             }
           }
         });

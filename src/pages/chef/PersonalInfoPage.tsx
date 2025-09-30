@@ -7,10 +7,22 @@ const PersonalInfoPage: React.FC = () => {
   const [profile, setProfile] = useState<Partial<ChefProfile> | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<Record<string, File | null>>({});
+  const [uploadingType, setUploadingType] = useState<string | null>(null);
   const [newCertification, setNewCertification] = useState({ name: '', issuer: '', dateObtained: '', expiryDate: '' });
   const [newServiceArea, setNewServiceArea] = useState({ city: '', zipCodes: '', maxDistance: 0 });
+
+  const cuisineOptions = [
+    'Française', 'Italienne', 'Japonaise', 'Chinoise', 'Indienne', 'Mexicaine',
+    'Méditerranéenne', 'Fusion', 'Végétarienne', 'Vegan', 'Sans gluten'
+  ];
+
+  const serviceTypeOptions = [
+    { value: 'home-dining', label: 'Repas à domicile' },
+    { value: 'private-events', label: 'Événements privés' },
+    { value: 'cooking-classes', label: 'Cours de cuisine' },
+    { value: 'catering', label: 'Traiteur' }
+  ];
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -28,41 +40,65 @@ const PersonalInfoPage: React.FC = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setProfile(prev => ({ ...prev, [name]: value }));
+    if (!profile) return;
+
+    const numericFields = ['hourlyRate', 'experience'];
+    const nextValue = numericFields.includes(name)
+      ? Number(value)
+      : value;
+
+    setProfile(prev => ({ ...prev, [name]: nextValue as never }));
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (documentType: string, e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setSelectedFile(e.target.files[0]);
+      const file = e.target.files[0];
+      setSelectedFiles(prev => ({ ...prev, [documentType]: file }));
     }
   };
 
   const handleUpload = async (documentType: string) => {
-    if (!selectedFile) {
+    const file = selectedFiles[documentType];
+    if (!file) {
       alert("Veuillez sélectionner un fichier à télécharger.");
       return;
     }
-    setUploading(true);
+    setUploadingType(documentType);
     try {
-      await chefService.uploadDocument(documentType, selectedFile);
-      alert("Document téléchargé avec succès !");
-      setSelectedFile(null);
-      // Refresh profile to show updated document status
+      await chefService.uploadDocument(documentType, file);
       const fetchedProfile = await chefService.getProfile();
       setProfile(fetchedProfile);
+      setSelectedFiles(prev => ({ ...prev, [documentType]: null }));
+      alert("Document téléchargé avec succès !");
     } catch (error) {
-      console.error("Failed to upload document:", error);
+      console.error(`Failed to upload document ${documentType}:`, error);
       alert("Erreur lors du téléchargement du document.");
     } finally {
-      setUploading(false);
+      setUploadingType(null);
     }
   };
 
+ const toggleArrayValue = (field: 'cuisineTypes' | 'serviceTypes', value: string) => {
+    setProfile(prev => {
+      if (!prev) return prev;
+      const currentValues = new Set(prev[field] || []);
+      if (currentValues.has(value)) {
+        currentValues.delete(value);
+      } else {
+        currentValues.add(value);
+      }
+      return { ...prev, [field]: Array.from(currentValues) };
+    });
+  };
   const handleAddCertification = () => {
     if (newCertification.name && newCertification.issuer && newCertification.dateObtained) {
       setProfile(prev => ({
         ...prev,
-        certifications: [...(prev?.certifications || []), { ...newCertification, dateObtained: new Date(newCertification.dateObtained).toISOString() }]
+        certifications: [...(prev?.certifications || []), {
+          ...newCertification,
+          dateObtained: new Date(newCertification.dateObtained).toISOString(),
+          expiryDate: newCertification.expiryDate ? new Date(newCertification.expiryDate).toISOString() : ''
+        }]
       }));
       setNewCertification({ name: '', issuer: '', dateObtained: '', expiryDate: '' });
     }
@@ -80,7 +116,11 @@ const PersonalInfoPage: React.FC = () => {
       const zipCodesArray = newServiceArea.zipCodes.split(',').map(zc => zc.trim());
       setProfile(prev => ({
         ...prev,
-        serviceAreas: [...(prev?.serviceAreas || []), { city: newServiceArea.city, zipCodes: zipCodesArray, maxDistance: newServiceArea.maxDistance }]
+        serviceAreas: [...(prev?.serviceAreas || []), {
+          city: newServiceArea.city,
+          zipCodes: zipCodesArray,
+          maxDistance: Number(newServiceArea.maxDistance)
+        }]
       }));
       setNewServiceArea({ city: '', zipCodes: '', maxDistance: 0 });
     }
@@ -98,7 +138,8 @@ const PersonalInfoPage: React.FC = () => {
     if (!profile) return;
     setLoading(true);
     try {
-      await chefService.updateProfile(profile);
+      const updatedProfile = await chefService.updateProfile(profile);
+      setProfile(updatedProfile);
       setIsEditing(false);
       alert("Profil mis à jour avec succès !");
     } catch (error) {
@@ -153,17 +194,65 @@ const PersonalInfoPage: React.FC = () => {
             </div>
             <div>
               <label htmlFor="hourlyRate" className="block text-sm font-medium text-gray-700">Tarif Horaire (€)</label>
-              <input type="number" id="hourlyRate" name="hourlyRate" value={profile.hourlyRate || 0} onChange={handleChange} disabled={!isEditing} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" />
+              <input type="number" id="hourlyRate" name="hourlyRate" value={profile.hourlyRate ?? 0} onChange={handleChange} disabled={!isEditing} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" />
             </div>
             <div>
               <label htmlFor="experience" className="block text-sm font-medium text-gray-700">Expérience (années)</label>
-              <input type="number" id="experience" name="experience" value={profile.experience || 0} onChange={handleChange} disabled={!isEditing} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" />
+              <input type="number" id="experience" name="experience" value={profile.experience ?? 0} onChange={handleChange} disabled={!isEditing} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm" />
             </div>
           </div>
           <div>
             <label htmlFor="description" className="block text-sm font-medium text-gray-700">Description</label>
             <textarea id="description" name="description" value={profile.description || ''} onChange={handleChange} disabled={!isEditing} rows={4} className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></textarea>
           </div>
+
+          {/* Cuisine & Services */}
+          <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">Styles culinaires proposés</h2>
+              <div className="flex flex-wrap gap-2">
+                {cuisineOptions.map(option => {
+                  const isSelected = profile?.cuisineTypes?.includes(option);
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => toggleArrayValue('cuisineTypes', option)}
+                      disabled={!isEditing}
+                      className={`px-3 py-2 rounded-full text-sm border transition-colors ${
+                        isSelected
+                          ? 'bg-green-500 border-green-500 text-white'
+                          : 'border-gray-200 text-gray-700 hover:border-green-400 hover:text-green-600'
+                      } ${!isEditing ? 'cursor-not-allowed opacity-60' : ''}`}
+                    >
+                      {option}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 mb-4">Types de services</h2>
+              <div className="space-y-3">
+                {serviceTypeOptions.map(option => {
+                  const isChecked = profile?.serviceTypes?.includes(option.value);
+                  return (
+                    <label key={option.value} className={`flex items-center space-x-3 p-3 border rounded-lg ${isChecked ? 'border-green-400 bg-green-50' : 'border-gray-200'}`}>
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => toggleArrayValue('serviceTypes', option.value)}
+                        disabled={!isEditing}
+                        className="rounded border-gray-300 text-green-600 focus:ring-green-500"
+                      />
+                      <span className="text-sm text-gray-700">{option.label}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
 
           {/* Documents Section */}
           <div className="mt-6">
@@ -191,9 +280,23 @@ const PersonalInfoPage: React.FC = () => {
                   </div>
                   {isEditing && (
                     <div className="flex items-center space-x-3">
-                      <input type="file" onChange={handleFileChange} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100" />
-                      <button type="button" onClick={() => handleUpload(docType.key)} disabled={!selectedFile || uploading} className="bg-green-500 text-white px-4 py-2 rounded-lg flex items-center space-x-2 disabled:opacity-50">
-                        {uploading ? 'Envoi...' : (profile.documents?.[docType.key]?.uploaded ? 'Changer' : 'Envoyer')}
+                      <input
+                        type="file"
+                        onChange={(e) => handleFileChange(docType.key, e)}
+                        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                      />
+                      {selectedFiles[docType.key] && (
+                        <span className="text-xs text-gray-500 truncate max-w-[160px]">
+                          {selectedFiles[docType.key]?.name}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleUpload(docType.key)}
+                        disabled={!selectedFiles[docType.key] || uploadingType === docType.key}
+                        className="bg-green-500 text-white px-4 py-2 rounded-lg flex items-center space-x-2 disabled:opacity-50"
+                      >
+                        {uploadingType === docType.key ? 'Envoi...' : (profile.documents?.[docType.key]?.uploaded ? 'Changer' : 'Envoyer')}
                         <Upload size={18} />
                       </button>
                     </div>

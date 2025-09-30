@@ -1,75 +1,125 @@
 import React, { useState } from 'react';
-import { chefService, ChefDocumentStatus } from '../../services/chefService';
+import { chefService, ChefDocumentStatus, UploadedChefDocument } from '../../services/chefService';
 import { API_CONFIG } from '../../utils/constants';
 
 interface DocumentUploadProps {
   documentType: string;
   documentStatus: ChefDocumentStatus;
-  onUpload: (documentType: string, url: string) => void;
+  onUpload: (documentType: string, document: UploadedChefDocument) => void;
+  onDelete: (documentType: string) => void;
 }
 
-const DocumentUpload: React.FC<DocumentUploadProps> = ({ documentType, documentStatus, onUpload }) => {
-  console.log(`[DocumentUpload] Rendering for ${documentType}. documentStatus:`, documentStatus);
+const DocumentUpload: React.FC<DocumentUploadProps> = ({ documentType, documentStatus, onUpload, onDelete }) => {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const serverBaseUrl = API_CONFIG.BASE_URL.replace('/api', '');
+   const serverBaseUrl = API_CONFIG.BASE_URL.replace(/\/api\/?$/, '');
   const fullDocumentUrl = documentStatus.url ? `${serverBaseUrl}${documentStatus.url}` : '';
+  const formattedUploadedAt = documentStatus.uploadedAt
+    ? new Date(documentStatus.uploadedAt).toLocaleString()
+    : null;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
+    if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0]);
+      setError(null);
     }
   };
 
   const handleUpload = async () => {
-    console.log(`[DocumentUpload] handleUpload triggered for ${documentType}. File:`, file);
-    if (!file) {
-      console.log(`[DocumentUpload] No file selected for ${documentType}.`);
-      return;
-    }
+    if (!file) return;
 
     setUploading(true);
     setError(null);
 
     try {
-      const { url } = await chefService.uploadDocument(documentType, file);
-      console.log(`[DocumentUpload] chefService.uploadDocument success for ${documentType}. URL:`, url);
-      onUpload(documentType, url);
-      console.log(`[DocumentUpload] onUpload prop called for ${documentType}.`);
+      const document = await chefService.uploadDocument(documentType, file);
+      onUpload(documentType, document);
+      setFile(null);
     } catch (err) {
       setError('Upload failed. Please try again.');
-      console.error(`[DocumentUpload] Upload failed for ${documentType}:`, err);
+      console.error(err);
     } finally {
       setUploading(false);
-      console.log(`[DocumentUpload] Upload process finished for ${documentType}.`);
+    }
+  };
+  const handleDelete = async () => {
+    setDeleting(true);
+    setError(null);
+
+    try {
+      await chefService.deleteDocument(documentType);
+      onDelete(documentType);
+      setFile(null);
+    } catch (err) {
+      setError('Failed to delete document. Please try again.');
+    } finally {
+      setDeleting(false);
     }
   };
 
+  const uploadButtonLabel = uploading
+    ? 'Uploading...'
+    : documentStatus.uploaded
+      ? 'Replace document'
+      : 'Upload document';
+
+
   return (
-    <div className="border p-4 rounded-lg">
-      <h3 className="text-lg font-semibold">{documentType.toUpperCase()}</h3>
+     <div className="border p-4 rounded-lg space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold">{documentType.toUpperCase()}</h3>
+        {documentStatus.uploaded && (
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleting || uploading}
+            className="text-sm text-red-600 hover:text-red-700 disabled:text-red-300"
+          >
+            {deleting ? 'Deleting…' : 'Delete document'}
+          </button>
+        )}
+      </div>
       {documentStatus.url ? (
-        <div>
-          <p>
-            Document uploaded. You can view it{' '}
-            <a href={fullDocumentUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500">
-              here
-            </a>.
+        <div className="space-y-2">
+          <p className="text-sm text-gray-700">
+            Document uploaded.{' '}
+            <a
+              href={fullDocumentUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-800"
+            >
+              View document
+            </a>
           </p>
           <p className="text-sm text-gray-500">Uploaded at: {documentStatus.uploadedAt}</p>
         </div>
       ) : (
-        <p>No document uploaded yet.</p>
+       <p className="text-sm text-gray-500">No document uploaded yet.</p>
       )}
-      <div className="mt-4">
-        <input type="file" onChange={handleFileChange} />
-        <button onClick={handleUpload} disabled={!file || uploading} className="ml-4 px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-400">
-          {uploading ? 'Uploading...' : 'Upload'}
+      
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <input
+          type="file"
+          accept=".pdf,image/*"
+          onChange={handleFileChange}
+          disabled={uploading || deleting}
+          className="text-sm"
+        />
+        <button
+          type="button"
+          onClick={handleUpload}
+          disabled={!file || uploading || deleting}
+          className="px-4 py-2 rounded bg-blue-500 text-white disabled:bg-gray-400"
+        >
+          {uploadButtonLabel}
         </button>
-        {error && <p className="text-red-500 mt-2">{error}</p>}
       </div>
+      
+      {error && <p className="text-sm text-red-500">{error}</p>}
     </div>
   );
 };

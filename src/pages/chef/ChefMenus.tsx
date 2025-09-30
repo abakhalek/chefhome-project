@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { chefService, ChefMenu } from '../../services/chefService';
 import { Plus, Edit, Trash2, Camera } from 'lucide-react';
+import { API_CONFIG } from '../../utils/constants';
 
 const ChefMenus: React.FC = () => {
   const [menus, setMenus] = useState<ChefMenu[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const serverBaseUrl = API_CONFIG.BASE_URL.replace('/api', '');
 
   const fetchMenus = async () => {
     setLoading(true);
@@ -59,7 +62,7 @@ const ChefMenus: React.FC = () => {
           <div key={menu._id} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
             <div className="relative h-48 bg-gray-200">
               {menu.image ? (
-                <img src={menu.image} alt={menu.name} className="w-full h-full object-cover" />
+                <img src={`${serverBaseUrl}${menu.image}`} alt={menu.name} className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-48 bg-gray-200 flex items-center justify-center"><Camera className="h-12 w-12 text-gray-400" /></div>
               )}
@@ -67,6 +70,21 @@ const ChefMenus: React.FC = () => {
             <div className="p-6">
               <h3 className="text-xl font-bold text-gray-900 mb-2">{menu.name}</h3>
               <p className="text-gray-600 text-sm mb-4 line-clamp-2">{menu.description}</p>
+
+              {/* New Info */}
+              <div className="text-sm text-gray-700 space-y-1 mb-4">
+                <p><strong>Catégorie:</strong> {menu.category}</p>
+                {menu.courses && menu.courses.length > 0 && <p><strong>Plats:</strong> {menu.courses.join(', ')}</p>}
+                {menu.ingredients && menu.ingredients.length > 0 && <p><strong>Ingrédients:</strong> {menu.ingredients.join(', ')}</p>}
+                {menu.allergens && menu.allergens.length > 0 && <p><strong>Allergènes:</strong> {menu.allergens.join(', ')}</p>}
+                {menu.dietaryOptions && menu.dietaryOptions.length > 0 && <p><strong>Options Diététiques:</strong> {menu.dietaryOptions.join(', ')}</p>}
+                {menu.duration && <p><strong>Durée:</strong> {menu.duration}</p>}
+                <p><strong>Invités:</strong> {menu.minGuests} - {menu.maxGuests}</p>
+                {menu.createdAt && <p><strong>Créé le:</strong> {new Date(menu.createdAt).toLocaleDateString()}</p>}
+                {menu.updatedAt && <p><strong>Mis à jour le:</strong> {new Date(menu.updatedAt).toLocaleDateString()}</p>}
+              </div>
+              {/* End New Info */}
+
               <div className="flex items-center justify-between mb-4">
                 <div className="text-2xl font-bold text-green-600">{menu.price}€{menu.type === 'horaire' && '/h'}</div>
                 <span className={`px-3 py-1 rounded-full text-sm font-medium ${menu.isActive ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-600'}`}>

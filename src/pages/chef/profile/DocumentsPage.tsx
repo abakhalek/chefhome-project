@@ -12,7 +12,6 @@ const DocumentsPage: React.FC = () => {
       try {
         const profileData = await chefService.getProfile();
         setProfile(profileData);
-        console.log('Frontend Profile Data:', profileData);
       } catch (err) {
         setError('Failed to fetch profile.');
         console.error(err);
@@ -25,7 +24,6 @@ const DocumentsPage: React.FC = () => {
   }, []);
 
   const handleUpload = (documentType: string, url: string) => {
-    console.log(`handleUpload called for ${documentType} with URL: ${url}`);
     if (profile) {
       setProfile({
         ...profile,
@@ -38,7 +36,6 @@ const DocumentsPage: React.FC = () => {
           },
         },
       });
-      console.log('Profile state updated after upload.');
     }
   };
 

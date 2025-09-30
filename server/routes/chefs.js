@@ -5,15 +5,53 @@ import multer from 'multer';
 import Chef from '../models/Chef.js';
 import User from '../models/User.js';
 import Booking from '../models/Booking.js';
-import { uploadToCloudinary } from '../utils/cloudinary.js';
 import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 
 const router = express.Router();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadsDirectory = path.join(__dirname, '..', 'uploads');
+const ALLOWED_DOCUMENT_TYPES = new Set(['cv', 'insurance', 'healthCertificate', 'businessLicense']);
+
+const ensureUploadsDirectory = () => {
+  if (!fs.existsSync(uploadsDirectory)) {
+    fs.mkdirSync(uploadsDirectory, { recursive: true });
+  }
+};
+
+const removeExistingDocumentFile = async (urlPath) => {
+  if (!urlPath) return;
+
+  try {
+    const sanitizedRelativePath = urlPath.replace(/^\//, '');
+    const absolutePath = path.join(__dirname, '..', sanitizedRelativePath);
+
+    if (!absolutePath.startsWith(uploadsDirectory)) {
+      console.warn('Skipping deletion for path outside uploads directory:', absolutePath);
+      return;
+    }
+
+    await fs.promises.unlink(absolutePath);
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.error('Error removing existing document file:', error);
+    }
+  }
+};
+
 
 // Multer for local document storage
 const docStorage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'uploads/')
+     try {
+      ensureUploadsDirectory();
+      cb(null, uploadsDirectory);
+    } catch (error) {
+      cb(error);
+    }
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
@@ -33,9 +71,19 @@ const uploadDoc = multer({
   }
 });
 
-// Multer for image upload to memory (for Cloudinary)
+// Multer for local image storage
+const imageStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/images/') // Save to uploads/images/
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname))
+  }
+});
+
 const imageUpload = multer({
-  storage: multer.memoryStorage(),
+  storage: imageStorage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
@@ -387,11 +435,18 @@ router.post('/me/documents', protect, authorize('chef'), uploadDoc.single('docum
       });
     }
 
+     if (!ALLOWED_DOCUMENT_TYPES.has(type)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid document type'
+      });
+    }
+
     const documentUrl = `/uploads/${req.file.filename}`;
     console.log(`Attempting to save document: type=${type}, url=${documentUrl}`);
 
     // Update chef profile with document URL
-    const chef = await Chef.findOne({ user: req.user.id });
+    const chef = await Chef.findOne({ user: req.user.id }).select('+documents');
     if (!chef) {
       console.error('Document upload error: Chef profile not found for user ID:', req.user.id);
       return res.status(404).json({
@@ -409,17 +464,28 @@ router.post('/me/documents', protect, authorize('chef'), uploadDoc.single('docum
       chef.documents[type] = {};
     }
 
+    const existingDocumentUrl = chef.documents[type]?.url;
+    if (existingDocumentUrl) {
+      await removeExistingDocumentFile(existingDocumentUrl);
+    }
+
+
     chef.documents[type].url = documentUrl;
     chef.documents[type].uploadedAt = new Date();
     
     console.log('Chef document object before save:', chef.documents);
+    chef.markModified('documents');
     await chef.save();
     console.log('Chef document saved successfully.');
 
     res.json({
       success: true,
       message: 'Document uploaded successfully',
-      url: documentUrl
+      document: {
+        type,
+        url: savedDocument.url,
+        uploadedAt: savedDocument.uploadedAt ? savedDocument.uploadedAt.toISOString() : null
+      }
     });
 
   } catch (error) {
@@ -428,6 +494,65 @@ router.post('/me/documents', protect, authorize('chef'), uploadDoc.single('docum
     res.status(500).json({
       success: false,
       message: 'Error uploading document'
+    });
+  }
+});
+
+// @desc    Delete a chef document
+// @route   DELETE /api/chefs/me/documents/:type
+// @access  Private (Chef)
+router.delete('/me/documents/:type', protect, authorize('chef'), async (req, res) => {
+  try {
+    const { type } = req.params;
+
+    if (!ALLOWED_DOCUMENT_TYPES.has(type)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid document type'
+      });
+    }
+
+    const chef = await Chef.findOne({ user: req.user.id }).select('+documents');
+
+    if (!chef) {
+      return res.status(404).json({
+        success: false,
+        message: 'Chef profile not found'
+      });
+    }
+
+    const documentEntry = chef.documents?.[type];
+
+    if (!documentEntry || !documentEntry.url) {
+      return res.status(404).json({
+        success: false,
+        message: 'Document not found'
+      });
+    }
+
+    await removeExistingDocumentFile(documentEntry.url);
+
+    chef.documents[type].url = null;
+    chef.documents[type].uploadedAt = null;
+    chef.markModified('documents');
+
+    await chef.save();
+
+    res.json({
+      success: true,
+      message: 'Document deleted successfully',
+      document: {
+        type,
+        url: null,
+        uploadedAt: null
+      }
+    });
+  } catch (error) {
+    console.error('--- Document Delete Error ---');
+    console.error('Detailed Error during document deletion:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting document'
     });
   }
 });
@@ -657,20 +782,16 @@ router.post('/me/menus/:menuId/image', protect, authorize('chef'), imageUpload.s
       });
     }
 
-    // Upload to Cloudinary
-    const result = await uploadToCloudinary(req.file.buffer, {
-      folder: `chef-menus/${req.user.id}`,
-      resource_type: 'image'
-    });
+    const imageUrl = `/uploads/images/${req.file.filename}`;
 
-    menu.image = result.secure_url;
+    menu.image = imageUrl;
     menu.updatedAt = new Date();
     await chef.save();
 
     res.json({
       success: true,
       message: 'Menu image uploaded successfully',
-      url: result.secure_url
+      url: imageUrl
     });
 
   } catch (error) {

@@ -46,15 +46,18 @@ const AddMenuPage: React.FC = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      let imageUrl = formData.image;
-      if (imageFile) {
-        // This is a placeholder for the actual image upload service call
-        // You would typically upload the image to your backend/CDN and get a URL
-        const uploadResponse = await chefService.uploadPortfolioImage(imageFile);
+      // Create menu first
+      const createdMenu = await chefService.createMenu({ ...formData, image: undefined }); // Create without image initially
+      let imageUrl = createdMenu.image;
+
+      if (imageFile && createdMenu._id) {
+        // Upload image using the created menu's ID
+        const uploadResponse = await chefService.uploadMenuImage(createdMenu._id, imageFile);
         imageUrl = uploadResponse.url;
+        // Update the created menu with the image URL
+        await chefService.updateMenu(createdMenu._id, { image: imageUrl });
       }
 
-      await chefService.createMenu({ ...formData, image: imageUrl });
       navigate('/chef-dashboard/menus');
     } catch (error) {
       console.error('Error creating menu:', error);

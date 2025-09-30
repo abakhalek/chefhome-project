@@ -7,6 +7,13 @@ export interface ChefDocumentStatus {
   uploadedAt?: string | null;
 }
 
+export interface UploadedChefDocument {
+  type: string;
+  url: string | null;
+  uploadedAt: string | null;
+}
+
+
 export interface ChefProfile {
   id: string;
   name: string;
@@ -66,8 +73,10 @@ export interface ChefMenu {
   duration: string;
   minGuests: number;
   maxGuests: number;
-  image?: string;
+  image?: string | null;
   isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Mission {
@@ -115,7 +124,7 @@ const normaliseId = (value: any): string => {
 const mapDocumentStatus = (doc?: { url?: string; uploadedAt?: string | null }): ChefDocumentStatus => ({
   uploaded: Boolean(doc?.url),
   url: doc?.url || undefined,
-  uploadedAt: doc?.uploadedAt || null
+  uploadedAt: doc?.uploadedAt ? new Date(doc.uploadedAt).toISOString() : null
 });
 
 const mapChefProfileFromApi = (chef: any): ChefProfile => {
@@ -159,7 +168,7 @@ const mapChefProfileFromApi = (chef: any): ChefProfile => {
     },
     portfolio: {
       images: Array.isArray(chef?.portfolio?.images) ? chef.portfolio.images : [],
-      description: chef?.portfolio?.description
+      description: chef?.portfolio?.description || ''
     },
     verification: {
       status: chef?.verification?.status || 'pending',
@@ -171,36 +180,55 @@ const mapChefProfileFromApi = (chef: any): ChefProfile => {
     }
   };
 };
+const toStringArray = (value?: string[]) =>
+  Array.isArray(value) ? value.map(item => item.trim()).filter(Boolean) : [];
+
 const mapMenuFromApi = (menu: any): ChefMenu => ({
   _id: normaliseId(menu),
   name: menu?.name || '',
   description: menu?.description || '',
-  price: menu?.price || 0,
-  type: menu?.type || 'forfait',
+  price: Number(menu?.price) || 0,
+  type: (menu?.type === 'horaire' ? 'horaire' : 'forfait'),
   category: menu?.category || '',
   courses: Array.isArray(menu?.courses)
-    ? menu.courses.map((course: any) =>
-        typeof course === 'string' ? course : course?.name || ''
-      ).filter(Boolean)
+    ? menu.courses
+        .map((course: any) =>
+          typeof course === 'string' ? course : course?.name || ''
+        )
+        .filter(Boolean)
     : [],
-  ingredients: Array.isArray(menu?.ingredients) ? menu.ingredients : [],
-  allergens: Array.isArray(menu?.allergens) ? menu.allergens : [],
-  dietaryOptions: Array.isArray(menu?.dietaryOptions) ? menu.dietaryOptions : [],
+  ingredients: toStringArray(menu?.ingredients),
+  allergens: toStringArray(menu?.allergens),
+  dietaryOptions: toStringArray(menu?.dietaryOptions),
   duration: menu?.duration || '',
-  minGuests: menu?.minGuests || 1,
-  maxGuests: menu?.maxGuests || 1,
-  image: menu?.image,
-  isActive: menu?.isActive ?? true
+  minGuests: Number(menu?.minGuests) || 1,
+  maxGuests: Number(menu?.maxGuests) || 1,
+  image: menu?.image || null,
+  isActive: menu?.isActive ?? true,
+  createdAt: menu?.createdAt ? new Date(menu.createdAt).toISOString() : undefined,
+  updatedAt: menu?.updatedAt ? new Date(menu.updatedAt).toISOString() : undefined
 });
 
 const prepareMenuPayload = (menuData: Partial<ChefMenu>) => ({
-  ...menuData,
+  name: menuData.name,
+  description: menuData.description,
+  price: menuData.price,
+  type: menuData.type,
+  category: menuData.category,
   courses: Array.isArray(menuData.courses)
     ? menuData.courses.map((course, index) => ({
         name: course,
         order: index + 1
       }))
-    : menuData.courses
+    : [],
+  ingredients: toStringArray(menuData.ingredients),
+  allergens: toStringArray(menuData.allergens),
+  dietaryOptions: toStringArray(menuData.dietaryOptions),
+  duration: menuData.duration,
+  minGuests: menuData.minGuests,
+  maxGuests: menuData.maxGuests,
+  image: menuData.image,
+  isActive: menuData.isActive
 });
 
 const mapMissionFromBooking = (booking: any): Mission => {
@@ -289,7 +317,7 @@ export const chefService = {
   // Profile Management
   async getProfile(): Promise<ChefProfile> {
     const response = await apiClient.get('/chefs/me/profile');
-    return response.data.chef;
+    return mapChefProfileFromApi(response.data.chef);
   },
 
   async updateProfile(profileData: Partial<ChefProfile>): Promise<ChefProfile> {
@@ -297,7 +325,7 @@ export const chefService = {
    return mapChefProfileFromApi(response.data.chef);
   },
 
-  async uploadDocument(documentType: string, file: File): Promise<{ url: string }> {
+  async uploadDocument(documentType: string, file: File): Promise<UploadedChefDocument> {
     const formData = new FormData();
     formData.append('document', file);
     formData.append('type', documentType);
@@ -307,7 +335,22 @@ export const chefService = {
          'Content-Type': 'multipart/form-data'
       }
     });
-    return response.data;
+     const document = response.data?.document ?? {};
+    return {
+      type: document.type ?? documentType,
+      url: document.url ?? null,
+      uploadedAt: document.uploadedAt ?? null
+    };
+  },
+
+  async deleteDocument(documentType: string): Promise<UploadedChefDocument> {
+    const response = await apiClient.delete(`/chefs/me/documents/${documentType}`);
+    const document = response.data?.document ?? {};
+    return {
+      type: document.type ?? documentType,
+      url: document.url ?? null,
+      uploadedAt: document.uploadedAt ?? null
+    };
   },
 
   async uploadPortfolioImage(file: File): Promise<{ url: string }> {
@@ -362,7 +405,6 @@ export const chefService = {
     pagination: any;
   }> {
     const response = await apiClient.get('/chefs/me/bookings', { params });
-    return response.data;
     return {
       missions: Array.isArray(response.data.bookings)
         ? response.data.bookings.map(mapMissionFromBooking)

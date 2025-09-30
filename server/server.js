@@ -50,7 +50,7 @@ const server = createServer(app);
 const io = initializeSocket(server);
 
 // Security middleware
-app.use(helmet());
+// app.use(helmet());
 app.use(compression());
 
 // Rate limiting
@@ -72,7 +72,10 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Serve static files for uploads
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*'); // Allow all origins
+  next();
+}, express.static(path.join(__dirname, 'uploads')));
 
 // Session middleware
 app.use(session({
