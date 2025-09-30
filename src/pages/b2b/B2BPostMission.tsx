@@ -1,3 +1,7 @@
+import { useState } from 'react';
+import { Send } from 'lucide-react';
+import * as b2bService from '../../services/b2bService';
+
 const B2BPostMission: React.FC = () => {
   const [missionData, setMissionData] = useState({
     title: '',

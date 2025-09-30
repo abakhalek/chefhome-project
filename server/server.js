@@ -11,6 +11,11 @@ import rateLimit from 'express-rate-limit';
 import { createServer } from 'http';
 import session from 'express-session';
 import passport from 'passport';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Import configuration
 import { connectDB, initializeSocket } from './config/index.js';
@@ -65,6 +70,9 @@ app.use(cors({
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Serve static files for uploads
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Session middleware
 app.use(session({

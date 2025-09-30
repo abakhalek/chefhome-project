@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-
+import applyToJSONTransform from '../utils/toJSON.js';
 const bookingSchema = new mongoose.Schema({
   client: {
     type: mongoose.Schema.Types.ObjectId,
@@ -116,6 +116,8 @@ const bookingSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+applyToJSONTransform(bookingSchema);
 
 // Middleware to update timeline on status change
 bookingSchema.pre('save', function(next) {

@@ -37,10 +37,12 @@ import ServiceAreaPage from './pages/chef/ServiceAreaPage';
 import NotificationsPage from './pages/chef/NotificationsPage';
 import MessagesPage from './pages/chef/MessagesPage';
 import SettingsPage from './pages/chef/SettingsPage';
+import AddMenuPage from './pages/chef/AddMenuPage';
 
 // Client Pages
 import ClientDashboardLayout from './pages/client/ClientDashboardLayout';
 import ClientDashboard from './pages/client/ClientDashboard';
+import ClientProfilePage from './pages/client/ClientProfilePage';
 
 // B2B Pages
 import B2BDashboardLayout from './pages/b2b/B2BDashboardLayout';
@@ -111,6 +113,7 @@ function App() {
         <Route path="profile/certifications" element={<CertificationsPage />} />
         <Route path="profile/service-area" element={<ServiceAreaPage />} />
         <Route path="menus" element={<ChefMenus />} />
+        <Route path="menus/new" element={<AddMenuPage />} />
         <Route path="planning" element={<ChefPlanning />} />
         <Route path="earnings" element={<ChefEarnings />} />
         <Route path="notifications" element={<NotificationsPage />} />
@@ -128,6 +131,7 @@ function App() {
         }
       >
         <Route index element={<ClientDashboard />} />
+        <Route path="profile" element={<ClientProfilePage />} />
       </Route>
 
       {/* B2B Routes */}

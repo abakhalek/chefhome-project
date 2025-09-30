@@ -1,6 +1,6 @@
 import React from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Home, User, ChefHat, Calendar, Euro, Bell, MessageCircle, Settings } from 'lucide-react';
+import { Home, User, ChefHat, Calendar, Euro, Bell, MessageCircle, Settings, FileText } from 'lucide-react';
 import PublicHeader from '../../components/layout/PublicHeader';
 
 const ChefDashboardLayout: React.FC = () => {
@@ -9,6 +9,7 @@ const ChefDashboardLayout: React.FC = () => {
   const sidebarLinks = [
     { path: '/chef-dashboard', label: 'Aperçu', icon: Home },
     { path: '/chef-dashboard/profile', label: 'Mon Profil', icon: User },
+    { path: '/chef-dashboard/profile/documents', label: 'Mes Documents', icon: FileText },
     { path: '/chef-dashboard/menus', label: 'Mes Offres', icon: ChefHat },
     { path: '/chef-dashboard/planning', label: 'Planning & Missions', icon: Calendar },
     { path: '/chef-dashboard/earnings', label: 'Revenus & Factures', icon: Euro },

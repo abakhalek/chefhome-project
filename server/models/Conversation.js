@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import applyToJSONTransform from '../utils/toJSON.js';
 
 const conversationSchema = new mongoose.Schema({
   participants: [{
@@ -34,6 +35,8 @@ const conversationSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+applyToJSONTransform(conversationSchema);
 
 // Indexes
 conversationSchema.index({ participants: 1, lastActivity: -1 });

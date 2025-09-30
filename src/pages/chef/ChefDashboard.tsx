@@ -1,12 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { chefService } from '../../services/chefService';
+import { chefService, Mission } from '../../services/chefService';
 import { Calendar, Euro, Star, TrendingUp, Plus, User, FileText } from 'lucide-react';
 
 const ChefDashboard: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
-  const [missions, setMissions] = useState<any[]>([]);
+  const [missions, setMissions] = useState<Mission[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -78,15 +78,15 @@ const ChefDashboard: React.FC = () => {
         <div className="lg:col-span-2 bg-white rounded-2xl shadow-lg p-6">
           <h3 className="text-lg font-bold text-gray-900 mb-4">Prochaines missions confirmées</h3>
           <div className="space-y-4">
-            {missions.length > 0 ? missions.map((mission: any) => (
-              <div key={mission._id} className="border border-gray-100 rounded-lg p-4">
+            {missions.length > 0 ? missions.map((mission) => (
+              <div key={mission.id} className="border border-gray-100 rounded-lg p-4">
                 <div className="flex justify-between items-start mb-1">
                   <h4 className="font-semibold text-gray-900 text-sm">{mission.client?.name}</h4>
-                  <span className="font-bold text-green-600">{mission.pricing?.totalAmount.toFixed(2)}€</span>
+                  <span className="font-bold text-green-600">{mission.price}</span>
                 </div>
-                <p className="text-xs text-gray-600 mb-2">{mission.serviceType}</p>
+                <p className="text-xs text-gray-600 mb-2">{mission.type}</p>
                 <div className="flex justify-between items-center text-xs text-gray-500">
-                  <span>{new Date(mission.eventDetails.date).toLocaleDateString('fr-FR')}</span>
+                  <span>{mission.date ? new Date(mission.date).toLocaleDateString('fr-FR') : ''}</span>
                   <Link to={`/chef-dashboard/planning`} className="text-blue-600 hover:underline">Voir détails</Link>
                 </div>
               </div>

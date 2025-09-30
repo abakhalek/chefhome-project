@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import applyToJSONTransform from '../utils/toJSON.js';
 
 const messageSchema = new mongoose.Schema({
   conversation: {
@@ -48,7 +49,7 @@ const messageSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
-
+applyToJSONTransform(messageSchema);
 // Indexes
 messageSchema.index({ conversation: 1, createdAt: -1 });
 messageSchema.index({ sender: 1, recipient: 1 });

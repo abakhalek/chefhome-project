@@ -6,20 +6,42 @@ import Chef from '../models/Chef.js';
 import User from '../models/User.js';
 import Booking from '../models/Booking.js';
 import { uploadToCloudinary } from '../utils/cloudinary.js';
+import path from 'path';
 
 const router = express.Router();
 
-// Configure multer for file uploads
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+// Multer for local document storage
+const docStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/')
   },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
+    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname))
+  }
+});
+
+const uploadDoc = multer({
+  storage: docStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf') {
+    if (file.mimetype === 'application/pdf' || file.mimetype.startsWith('image/')) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type'), false);
+      cb(new Error('Invalid file type. Only PDF and images are allowed.'), false);
+    }
+  }
+});
+
+// Multer for image upload to memory (for Cloudinary)
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only images are allowed.'), false);
     }
   }
 });
@@ -112,7 +134,8 @@ router.get('/me/profile', protect, authorize('chef'), async (req, res) => {
   try {
     const chef = await Chef.findOne({ user: req.user.id })
       .populate('user', 'name email phone avatar')
-      .populate('reviews.user', 'name avatar');
+      .populate('reviews.user', 'name avatar')
+      .select('+documents');
 
     if (!chef) {
       return res.status(404).json({
@@ -120,6 +143,9 @@ router.get('/me/profile', protect, authorize('chef'), async (req, res) => {
         message: 'Chef profile not found'
       });
     }
+
+    console.log('--- Chef Profile Data from DB ---');
+    console.log(chef);
 
     res.json({
       success: true,
@@ -145,8 +171,12 @@ router.put('/me/profile', protect, authorize('chef'), [
   body('description').optional().isLength({ min: 50, max: 1000 }).withMessage('Description must be 50-1000 characters')
 ], async (req, res) => {
   try {
+    console.log('--- Update Chef Profile Debug ---');
+    console.log('Request Body:', req.body);
+
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('Validation Errors:', errors.array());
       return res.status(400).json({
         success: false,
         errors: errors.array()
@@ -158,6 +188,7 @@ router.put('/me/profile', protect, authorize('chef'), [
     let chef = await Chef.findOne({ user: req.user.id });
     
     if (!chef) {
+      console.log('Chef profile not found, creating new one.');
       // Create new chef profile
       chef = await Chef.create({
         user: req.user.id,
@@ -167,17 +198,20 @@ router.put('/me/profile', protect, authorize('chef'), [
         description,
       });
     } else {
+      console.log('Updating existing chef profile.');
       // Update existing chef profile fields
       if (specialty) chef.specialty = specialty;
       if (experience) chef.experience = experience;
       if (hourlyRate) chef.hourlyRate = hourlyRate;
       if (description) chef.description = description;
       await chef.save();
+      console.log('Chef profile saved.');
     }
 
     // Update user details
     const user = await User.findById(req.user.id);
     if (user) {
+      console.log('Updating user details.');
       if (name) user.name = name;
       if (email) user.email = email;
       if (phone) user.phone = phone;
@@ -190,9 +224,11 @@ router.put('/me/profile', protect, authorize('chef'), [
         };
       }
       await user.save();
+      console.log('User details saved.');
     }
 
     await chef.populate('user', 'name email phone avatar');
+    console.log('Chef populated with user data.');
 
     res.json({
       success: true,
@@ -201,7 +237,8 @@ router.put('/me/profile', protect, authorize('chef'), [
     });
 
   } catch (error) {
-    console.error('Update chef profile error:', error);
+    console.error('--- Update Chef Profile Error ---');
+    console.error('Detailed Error:', error);
     res.status(500).json({
       success: false,
       message: 'Error updating chef profile'
@@ -212,9 +249,10 @@ router.put('/me/profile', protect, authorize('chef'), [
 // @desc    Upload chef documents
 // @route   POST /api/chefs/me/documents
 // @access  Private (Chef)
-router.post('/me/documents', protect, authorize('chef'), upload.single('document'), async (req, res) => {
+router.post('/me/documents', protect, authorize('chef'), uploadDoc.single('document'), async (req, res) => {
   try {
     if (!req.file) {
+      console.error('Document upload error: No file uploaded.');
       return res.status(400).json({
         success: false,
         message: 'No file uploaded'
@@ -223,38 +261,51 @@ router.post('/me/documents', protect, authorize('chef'), upload.single('document
 
     const { type } = req.body;
     if (!type) {
+      console.error('Document upload error: Document type is required.');
       return res.status(400).json({
         success: false,
         message: 'Document type is required'
       });
     }
 
-    // Upload to Cloudinary
-    const result = await uploadToCloudinary(req.file.buffer, {
-      folder: `chef-documents/${req.user.id}`,
-      resource_type: 'auto'
-    });
+    const documentUrl = `/uploads/${req.file.filename}`;
+    console.log(`Attempting to save document: type=${type}, url=${documentUrl}`);
 
     // Update chef profile with document URL
     const chef = await Chef.findOne({ user: req.user.id });
     if (!chef) {
+      console.error('Document upload error: Chef profile not found for user ID:', req.user.id);
       return res.status(404).json({
         success: false,
         message: 'Chef profile not found'
       });
     }
 
-    chef.documents[type] = result.secure_url;
+    // Ensure documents object exists before assigning
+    if (!chef.documents) {
+      chef.documents = {};
+    }
+    // Ensure the specific document type object exists before assigning
+    if (!chef.documents[type]) {
+      chef.documents[type] = {};
+    }
+
+    chef.documents[type].url = documentUrl;
+    chef.documents[type].uploadedAt = new Date();
+    
+    console.log('Chef document object before save:', chef.documents);
     await chef.save();
+    console.log('Chef document saved successfully.');
 
     res.json({
       success: true,
       message: 'Document uploaded successfully',
-      url: result.secure_url
+      url: documentUrl
     });
 
   } catch (error) {
-    console.error('Document upload error:', error);
+    console.error('--- Document Upload Error ---');
+    console.error('Detailed Error during document upload:', error);
     res.status(500).json({
       success: false,
       message: 'Error uploading document'
@@ -413,6 +464,58 @@ router.delete('/me/menus/:menuId', protect, authorize('chef'), async (req, res) 
     res.status(500).json({
       success: false,
       message: 'Error deleting menu'
+    });
+  }
+});
+
+// @desc    Upload menu image
+// @route   POST /api/chefs/me/menus/:menuId/image
+// @access  Private (Chef)
+router.post('/me/menus/:menuId/image', protect, authorize('chef'), imageUpload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded'
+      });
+    }
+
+    const chef = await Chef.findOne({ user: req.user.id });
+    if (!chef) {
+      return res.status(404).json({
+        success: false,
+        message: 'Chef profile not found'
+      });
+    }
+
+    const menuIndex = chef.portfolio.menus.findIndex(menu => menu._id.toString() === req.params.menuId);
+    if (menuIndex === -1) {
+      return res.status(404).json({
+        success: false,
+        message: 'Menu not found'
+      });
+    }
+
+    // Upload to Cloudinary
+    const result = await uploadToCloudinary(req.file.buffer, {
+      folder: `chef-menus/${req.user.id}`,
+      resource_type: 'image'
+    });
+
+    chef.portfolio.menus[menuIndex].image = result.secure_url;
+    await chef.save();
+
+    res.json({
+      success: true,
+      message: 'Menu image uploaded successfully',
+      url: result.secure_url
+    });
+
+  } catch (error) {
+    console.error('Menu image upload error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error uploading menu image'
     });
   }
 });

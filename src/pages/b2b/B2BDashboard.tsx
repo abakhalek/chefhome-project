@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { b2bService, B2BProfileData, B2BMission } from '../../services/b2bService';
 import { Link } from 'react-router-dom';
-import { Briefcase, Target, Euro, CheckCircle } from 'lucide-react';
+import { Briefcase, Target, Euro, CheckCircle, User } from 'lucide-react';
 
 const B2BDashboard: React.FC = () => {
   const [profile, setProfile] = useState<B2BProfileData | null>(null);

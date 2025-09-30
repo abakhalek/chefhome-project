@@ -3,6 +3,7 @@ import { body, validationResult } from 'express-validator';
 import { protect, authorize } from '../middleware/auth.js';
 import Booking from '../models/Booking.js';
 import Chef from '../models/Chef.js';
+import User from '../models/User.js';
 
 const router = express.Router();
 

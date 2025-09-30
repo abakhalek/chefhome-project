@@ -85,7 +85,7 @@ export const useChef = () => {
     try {
       setLoading(true);
       const updatedMenu = await chefService.updateMenu(menuId, menuData);
-      setMenus(prev => prev.map(menu => menu.id === menuId ? updatedMenu : menu));
+      setMenus(prev => prev.map(menu => (menu._id === menuId ? updatedMenu : menu)));
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -96,7 +96,7 @@ export const useChef = () => {
   const deleteMenu = async (menuId: string) => {
     try {
       await chefService.deleteMenu(menuId);
-      setMenus(prev => prev.filter(menu => menu.id !== menuId));
+      setMenus(prev => prev.filter(menu => menu._id !== menuId));
     } catch (err: any) {
       setError(err.message);
     }
@@ -142,7 +142,7 @@ export const useChef = () => {
   const loadEarnings = async (params?: any) => {
     try {
       const { earnings: earningsData } = await chefService.getEarnings(params);
-      setEarnings(earningsData);
+      setEarnings(earningsData.daily || []);
     } catch (err: any) {
       setError(err.message);
     }

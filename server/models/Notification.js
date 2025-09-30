@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import applyToJSONTransform from '../utils/toJSON.js';
 
 const notificationSchema = new mongoose.Schema({
   recipient: {
@@ -66,6 +67,7 @@ const notificationSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+applyToJSONTransform(notificationSchema);
 
 // Indexes for better performance
 notificationSchema.index({ recipient: 1, read: 1, createdAt: -1 });

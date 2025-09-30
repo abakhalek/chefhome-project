@@ -1,4 +1,6 @@
 import mongoose from 'mongoose';
+import applyToJSONTransform from '../utils/toJSON.js';
+
 
 const chefSchema = new mongoose.Schema({
   user: {
@@ -73,10 +75,10 @@ const chefSchema = new mongoose.Schema({
     documentUrl: String
   }],
   documents: {
-    cv: String,
-    insurance: String,
-    healthCertificate: String,
-    businessLicense: String
+    cv: { url: { type: String, default: null }, uploadedAt: { type: Date, default: null } },
+    insurance: { url: { type: String, default: null }, uploadedAt: { type: Date, default: null } },
+    healthCertificate: { url: { type: String, default: null }, uploadedAt: { type: Date, default: null } },
+    businessLicense: { url: { type: String, default: null }, uploadedAt: { type: Date, default: null } }
   },
   rating: {
     average: { type: Number, default: 0, min: 0, max: 5 },
@@ -118,6 +120,8 @@ const chefSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+applyToJSONTransform(chefSchema);
 
 // Calculate average rating
 chefSchema.methods.calculateAverageRating = function() {

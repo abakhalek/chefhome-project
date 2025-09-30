@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import applyToJSONTransform from '../utils/toJSON.js';
 
 const userSchema = new mongoose.Schema({
   name: {
@@ -24,7 +25,7 @@ const userSchema = new mongoose.Schema({
   phone: {
     type: String,
     required: [true, 'Phone number is required'],
-    match: [/^[\+]?[1-9][\d]{0,15}$/, 'Please enter a valid phone number']
+    match: [/^(?:(?:\+|00)33|0)\s*[1-9](?:[\s.-]*\d{2}){4}$/, 'Please enter a valid phone number']
   },
   role: {
     type: String,
@@ -78,6 +79,8 @@ const userSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+applyToJSONTransform(userSchema);
 
 // Encrypt password before saving
 userSchema.pre('save', async function(next) {

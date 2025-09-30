@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-
+import applyToJSONTransform from '../utils/toJSON.js';
 const menuSchema = new mongoose.Schema({
   chef: {
     type: mongoose.Schema.Types.ObjectId,
@@ -71,6 +71,7 @@ const menuSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+applyToJSONTransform(menuSchema);
 
 // Indexes
 menuSchema.index({ chef: 1, isActive: 1 });
