@@ -478,13 +478,17 @@ router.post('/me/documents', protect, authorize('chef'), uploadDoc.single('docum
     await chef.save();
     console.log('Chef document saved successfully.');
 
+    const savedDocument = chef.documents[type];
+
     res.json({
       success: true,
       message: 'Document uploaded successfully',
       document: {
         type,
-        url: savedDocument.url,
-        uploadedAt: savedDocument.uploadedAt ? savedDocument.uploadedAt.toISOString() : null
+        url: savedDocument?.url || null,
+        uploadedAt: savedDocument?.uploadedAt
+          ? new Date(savedDocument.uploadedAt).toISOString()
+          : null
       }
     });
 
