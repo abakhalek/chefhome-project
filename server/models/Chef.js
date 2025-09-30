@@ -28,20 +28,25 @@ const chefSchema = new mongoose.Schema({
     required: [true, 'Description is required'],
     maxlength: [1000, 'Description cannot exceed 1000 characters']
   },
-  cuisineTypes: [{
-    type: String,
-    required: true
-  }],
-  serviceTypes: [{
-    type: String,
-    enum: ['home-dining', 'private-events', 'cooking-classes', 'catering'],
-    required: true
-  }],
-  serviceAreas: [{
-    city: String,
-    zipCodes: [String],
-    maxDistance: { type: Number, default: 30 } // km
-  }],
+  cuisineTypes: {
+    type: [String],
+    default: []
+  },
+  serviceTypes: {
+    type: [{
+      type: String,
+      enum: ['home-dining', 'private-events', 'cooking-classes', 'catering']
+    }],
+    default: []
+  },
+  serviceAreas: {
+    type: [{
+      city: String,
+      zipCodes: [String],
+      maxDistance: { type: Number, default: 30 } // km
+    }],
+    default: []
+  },
   availability: {
     schedule: {
       monday: { available: Boolean, hours: [{ start: String, end: String }] },
@@ -57,23 +62,47 @@ const chefSchema = new mongoose.Schema({
     maximumGuests: { type: Number, default: 12 }
   },
   portfolio: {
-    images: [String],
-    videos: [String],
-    menus: [{
-      name: String,
-      description: String,
-      price: Number,
-      courses: [String],
-      dietaryOptions: [String]
-    }]
+  images: { type: [String], default: [] },
+    videos: { type: [String], default: [] },
+    description: { type: String, default: '' },
+    menus: {
+      type: [{
+        name: { type: String, required: true, trim: true },
+        description: { type: String, required: true, trim: true },
+        price: { type: Number, required: true, min: 0 },
+        type: { type: String, enum: ['forfait', 'horaire'], default: 'forfait' },
+        category: { type: String, default: 'Gastronomique' },
+        courses: {
+          type: [{
+            name: { type: String, required: true, trim: true },
+            order: { type: Number, default: 1 }
+          }],
+          default: []
+        },
+        ingredients: { type: [String], default: [] },
+        dietaryOptions: { type: [String], default: [] },
+        allergens: { type: [String], default: [] },
+        duration: { type: String, default: '' },
+        minGuests: { type: Number, default: 1 },
+        maxGuests: { type: Number, default: 1 },
+        image: { type: String, default: null },
+        isActive: { type: Boolean, default: true },
+        createdAt: { type: Date, default: Date.now },
+        updatedAt: { type: Date }
+      }],
+      default: []
+    }
   },
-  certifications: [{
+  certifications: {
+    type: [{
     name: String,
     issuer: String,
-    dateObtained: Date,
-    expiryDate: Date,
-    documentUrl: String
-  }],
+      dateObtained: Date,
+      expiryDate: Date,
+      documentUrl: String
+    }],
+    default: []
+  },
   documents: {
     cv: { url: { type: String, default: null }, uploadedAt: { type: Date, default: null } },
     insurance: { url: { type: String, default: null }, uploadedAt: { type: Date, default: null } },

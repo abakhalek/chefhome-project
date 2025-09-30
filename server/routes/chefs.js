@@ -46,6 +46,59 @@ const imageUpload = multer({
   }
 });
 
+const parseNumber = (value) => {
+  if (value === null || value === undefined || value === '') return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const normaliseStringArray = (value) =>
+  Array.isArray(value)
+    ? value
+        .map(item => {
+          if (typeof item === 'string') return item;
+          if (item && typeof item.name === 'string') return item.name;
+          return null;
+        })
+        .filter(Boolean)
+    : [];
+
+const normaliseValueArray = (value) =>
+  Array.isArray(value)
+    ? value.filter(item => item !== null && item !== undefined && item !== '')
+    : undefined;
+
+const normaliseMenuPayload = (menu = {}) => {
+  const courses = Array.isArray(menu?.courses)
+    ? menu.courses
+        .map((course, index) => ({
+          name: typeof course === 'string' ? course : course?.name || '',
+          order: typeof course?.order === 'number' ? course.order : index + 1
+        }))
+        .filter(course => course.name)
+    : [];
+
+  const minGuests = parseNumber(menu?.minGuests) ?? 1;
+  const maxGuests = parseNumber(menu?.maxGuests) ?? minGuests;
+
+  return {
+    name: menu?.name,
+    description: menu?.description,
+    price: parseNumber(menu?.price) ?? 0,
+    type: ['forfait', 'horaire'].includes(menu?.type) ? menu.type : 'forfait',
+    category: menu?.category || 'Gastronomique',
+    courses,
+    ingredients: normaliseStringArray(menu?.ingredients),
+    allergens: normaliseStringArray(menu?.allergens),
+    dietaryOptions: normaliseStringArray(menu?.dietaryOptions),
+    duration: menu?.duration || '',
+    minGuests,
+    maxGuests: maxGuests < minGuests ? minGuests : maxGuests,
+    image: menu?.image || null,
+    isActive: typeof menu?.isActive === 'boolean' ? menu.isActive : true
+  };
+};
+
 // @desc    Get all chefs with filtering and pagination
 // @route   GET /api/chefs
 // @access  Public
@@ -183,7 +236,42 @@ router.put('/me/profile', protect, authorize('chef'), [
       });
     }
 
-    const { name, email, phone, address, city, zipCode, specialty, experience, hourlyRate, description } = req.body;
+    const {
+      name,
+      email,
+      phone,
+      address,
+      city,
+      zipCode,
+      specialty,
+      experience,
+      hourlyRate,
+      description,
+      cuisineTypes,
+      serviceTypes,
+      serviceAreas,
+      certifications,
+      portfolio
+    } = req.body;
+
+    const normalisedCuisineTypes = normaliseValueArray(cuisineTypes);
+    const normalisedServiceTypes = normaliseValueArray(serviceTypes);
+    const normalisedServiceAreas = Array.isArray(serviceAreas)
+      ? serviceAreas.map(area => ({
+          city: area?.city || '',
+          zipCodes: Array.isArray(area?.zipCodes) ? area.zipCodes : [],
+          maxDistance: typeof area?.maxDistance === 'number' ? area.maxDistance : 30
+        }))
+      : undefined;
+    const normalisedCertifications = Array.isArray(certifications)
+      ? certifications.map(cert => ({
+          name: cert?.name || '',
+          issuer: cert?.issuer || '',
+          dateObtained: cert?.dateObtained || null,
+          expiryDate: cert?.expiryDate || null,
+          documentUrl: cert?.documentUrl || null
+        }))
+      : undefined;
 
     let chef = await Chef.findOne({ user: req.user.id });
     
@@ -193,17 +281,48 @@ router.put('/me/profile', protect, authorize('chef'), [
       chef = await Chef.create({
         user: req.user.id,
         specialty,
-        experience,
-        hourlyRate,
+        experience: parseNumber(experience),
+        hourlyRate: parseNumber(hourlyRate),
         description,
+         cuisineTypes: normalisedCuisineTypes || [],
+        serviceTypes: normalisedServiceTypes || [],
+        serviceAreas: normalisedServiceAreas || [],
+        certifications: normalisedCertifications || [],
+        portfolio: {
+          description: portfolio?.description || '',
+          images: normaliseValueArray(portfolio?.images) || [],
+          videos: normaliseValueArray(portfolio?.videos) || []
+        }
       });
     } else {
       console.log('Updating existing chef profile.');
       // Update existing chef profile fields
       if (specialty) chef.specialty = specialty;
-      if (experience) chef.experience = experience;
-      if (hourlyRate) chef.hourlyRate = hourlyRate;
+      const parsedExperience = parseNumber(experience);
+      const parsedHourlyRate = parseNumber(hourlyRate);
+      if (typeof parsedExperience !== 'undefined') chef.experience = parsedExperience;
+      if (typeof parsedHourlyRate !== 'undefined') chef.hourlyRate = parsedHourlyRate;
       if (description) chef.description = description;
+      if (normalisedCuisineTypes) chef.cuisineTypes = normalisedCuisineTypes;
+      if (normalisedServiceTypes) chef.serviceTypes = normalisedServiceTypes;
+      if (normalisedServiceAreas) chef.serviceAreas = normalisedServiceAreas;
+      if (normalisedCertifications) chef.certifications = normalisedCertifications;
+
+      if (!chef.portfolio) {
+        chef.portfolio = { images: [], videos: [], description: '', menus: [] };
+      }
+
+      if (portfolio) {
+        if (typeof portfolio.description === 'string') {
+          chef.portfolio.description = portfolio.description;
+        }
+        if (Array.isArray(portfolio.images)) {
+          chef.portfolio.images = portfolio.images;
+        }
+        if (Array.isArray(portfolio.videos)) {
+          chef.portfolio.videos = portfolio.videos;
+        }
+      }
       await chef.save();
       console.log('Chef profile saved.');
     }
@@ -328,7 +447,7 @@ router.get('/me/menus', protect, authorize('chef'), async (req, res) => {
 
     res.json({
       success: true,
-      menus: chef.portfolio.menus || []
+      menus: chef?.portfolio?.menus || []
     });
 
   } catch (error) {
@@ -365,11 +484,20 @@ router.post('/me/menus', protect, authorize('chef'), [
         message: 'Chef profile not found'
       });
     }
+     if (!chef.portfolio) {
+      chef.portfolio = { images: [], videos: [], description: '', menus: [] };
+    }
+
+    if (!Array.isArray(chef.portfolio.menus)) {
+      chef.portfolio.menus = [];
+    }
+
+    const menuData = normaliseMenuPayload(req.body);
 
     const newMenu = {
-      ...req.body,
+      ...menuData,
       createdAt: new Date(),
-      isActive: true
+      updatedAt: new Date()
     };
 
     if (!chef.portfolio.menus) {
@@ -378,11 +506,12 @@ router.post('/me/menus', protect, authorize('chef'), [
     
     chef.portfolio.menus.push(newMenu);
     await chef.save();
+    const savedMenu = chef.portfolio.menus[chef.portfolio.menus.length - 1];
 
     res.status(201).json({
       success: true,
       message: 'Menu created successfully',
-      menu: newMenu
+      menu: savedMenu
     });
 
   } catch (error) {
@@ -407,18 +536,28 @@ router.put('/me/menus/:menuId', protect, authorize('chef'), async (req, res) => 
       });
     }
 
-    const menuIndex = chef.portfolio.menus.findIndex(menu => menu._id === req.params.menuId);
-    if (menuIndex === -1) {
+     if (!chef.portfolio || !Array.isArray(chef.portfolio.menus)) {
       return res.status(404).json({
         success: false,
         message: 'Menu not found'
       });
     }
 
-    chef.portfolio.menus[menuIndex] = {
-      ...chef.portfolio.menus[menuIndex],
+    const menu = chef.portfolio.menus.id(req.params.menuId);
+    if (!menu) {
+      return res.status(404).json({
+        success: false,
+        message: 'Menu not found'
+      });
+    }
+
+    const baseMenuData = menu.toObject ? menu.toObject() : menu;
+    const mergedMenu = {
+      ...baseMenuData,
       ...req.body,
-      updatedAt: new Date()
+      price: parseNumber(req.body?.price) ?? menu.price,
+      minGuests: parseNumber(req.body?.minGuests) ?? menu.minGuests,
+      maxGuests: parseNumber(req.body?.maxGuests) ?? menu.maxGuests
     };
 
     await chef.save();
@@ -426,7 +565,7 @@ router.put('/me/menus/:menuId', protect, authorize('chef'), async (req, res) => 
     res.json({
       success: true,
       message: 'Menu updated successfully',
-      menu: chef.portfolio.menus[menuIndex]
+      menu
     });
 
   } catch (error) {
@@ -451,7 +590,22 @@ router.delete('/me/menus/:menuId', protect, authorize('chef'), async (req, res) 
       });
     }
 
-    chef.portfolio.menus = chef.portfolio.menus.filter(menu => menu._id !== req.params.menuId);
+     if (!chef.portfolio || !Array.isArray(chef.portfolio.menus)) {
+      return res.status(404).json({
+        success: false,
+        message: 'Menu not found'
+      });
+    }
+
+    const menu = chef.portfolio.menus.id(req.params.menuId);
+    if (!menu) {
+      return res.status(404).json({
+        success: false,
+        message: 'Menu not found'
+      });
+    }
+
+    menu.deleteOne();
     await chef.save();
 
     res.json({
@@ -488,8 +642,15 @@ router.post('/me/menus/:menuId/image', protect, authorize('chef'), imageUpload.s
       });
     }
 
-    const menuIndex = chef.portfolio.menus.findIndex(menu => menu._id.toString() === req.params.menuId);
-    if (menuIndex === -1) {
+    if (!chef.portfolio || !Array.isArray(chef.portfolio.menus)) {
+      return res.status(404).json({
+        success: false,
+        message: 'Menu not found'
+      });
+    }
+
+    const menu = chef.portfolio.menus.id(req.params.menuId);
+    if (!menu) {
       return res.status(404).json({
         success: false,
         message: 'Menu not found'
@@ -502,7 +663,8 @@ router.post('/me/menus/:menuId/image', protect, authorize('chef'), imageUpload.s
       resource_type: 'image'
     });
 
-    chef.portfolio.menus[menuIndex].image = result.secure_url;
+    menu.image = result.secure_url;
+    menu.updatedAt = new Date();
     await chef.save();
 
     res.json({
