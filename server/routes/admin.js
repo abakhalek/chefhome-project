@@ -53,6 +53,77 @@ const enrichUserWithStats = async (userDoc) => {
   return user;
 };
 
+const mapChefForAdmin = (chefDoc) => {
+  if (!chefDoc) {
+    return null;
+  }
+
+  const chef = typeof chefDoc.toObject === 'function'
+    ? chefDoc.toObject({ virtuals: true })
+    : chefDoc;
+
+  const user = chef.user || {};
+  const address = user.address || {};
+
+  const documents = Object.entries(chef.documents || {}).map(([type, doc]) => ({
+    type,
+    url: doc?.url || null,
+    uploadedAt: doc?.uploadedAt instanceof Date
+      ? doc.uploadedAt.toISOString()
+      : (doc?.uploadedAt || null)
+  }));
+
+  const menus = Array.isArray(chef.portfolio?.menus)
+    ? chef.portfolio.menus.map((menu) => ({
+        id: menu?._id ? menu._id.toString() : '',
+        name: menu?.name,
+        description: menu?.description,
+        price: menu?.price,
+        type: menu?.type,
+        category: menu?.category,
+        minGuests: menu?.minGuests,
+        maxGuests: menu?.maxGuests,
+        image: menu?.image || null,
+        isActive: typeof menu?.isActive === 'boolean' ? menu.isActive : true
+      }))
+    : [];
+
+  const certifications = Array.isArray(chef.certifications)
+    ? chef.certifications.map((cert) => ({
+        name: cert?.name,
+        issuer: cert?.issuer,
+        dateObtained: cert?.dateObtained instanceof Date
+          ? cert.dateObtained.toISOString()
+          : (cert?.dateObtained || null),
+        expiryDate: cert?.expiryDate instanceof Date
+          ? cert.expiryDate.toISOString()
+          : (cert?.expiryDate || null),
+        documentUrl: cert?.documentUrl || null
+      }))
+    : [];
+
+  return {
+    id: chef._id?.toString() || '',
+    name: user.name || '',
+    email: user.email || '',
+    phone: user.phone || '',
+    specialty: chef.specialty || '',
+    experience: chef.experience || 0,
+    hourlyRate: chef.hourlyRate || 0,
+    location: {
+      city: address.city || '',
+      zipCode: address.zipCode || ''
+    },
+    submittedAt: chef.createdAt instanceof Date
+      ? chef.createdAt.toISOString()
+      : new Date().toISOString(),
+    documents,
+    certifications,
+    menus,
+    verification: chef.verification || { status: 'pending' }
+  };
+};
+
 // @desc    Get admin dashboard stats
 // @route   GET /api/admin/stats
 // @access  Private (Admin)
@@ -190,6 +261,58 @@ router.get('/users', async (req, res) => {
   }
 });
 
+// @desc    Get chefs with optional status filtering
+// @route   GET /api/admin/chefs
+// @access  Private (Admin)
+router.get('/chefs', async (req, res) => {
+  try {
+    const { status = 'all', page = 1, limit = 20 } = req.query;
+
+    const parsedLimit = parseInt(limit, 10);
+    const parsedPage = parseInt(page, 10);
+    const effectiveLimit = Number.isNaN(parsedLimit) || parsedLimit <= 0 ? 0 : parsedLimit;
+    const effectivePage = Number.isNaN(parsedPage) || parsedPage <= 0 ? 1 : parsedPage;
+
+    const query = {};
+    if (status && status !== 'all') {
+      query['verification.status'] = status;
+    }
+
+    const chefsQuery = Chef.find(query)
+      .populate('user', 'name email phone createdAt address')
+      .sort({ createdAt: -1 });
+
+    if (effectiveLimit) {
+      chefsQuery.limit(effectiveLimit).skip((effectivePage - 1) * effectiveLimit);
+    }
+
+    const [chefs, total] = await Promise.all([
+      chefsQuery,
+      Chef.countDocuments(query)
+    ]);
+
+    const mappedChefs = chefs.map(mapChefForAdmin).filter(Boolean);
+
+    res.json({
+      success: true,
+      chefs: mappedChefs,
+      pagination: {
+        page: effectivePage,
+        limit: effectiveLimit || mappedChefs.length,
+        total,
+        pages: effectiveLimit ? Math.ceil(total / effectiveLimit) : 1
+      }
+    });
+
+  } catch (error) {
+    console.error('Get chefs error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching chefs'
+    });
+  }
+});
+
 // @desc    Get pending chef applications
 // @route   GET /api/admin/chefs/pending
 // @access  Private (Admin)
@@ -199,58 +322,7 @@ router.get('/chefs/pending', async (req, res) => {
       .populate('user', 'name email phone createdAt address')
       .sort({ createdAt: -1 });
 
-      const mappedChefs = pendingChefs.map((chef) => {
-      const user = chef.user || {};
-      const address = user.address || {};
-
-      const documents = Object.entries(chef.documents || {}).map(([type, doc]) => ({
-        type,
-        url: doc?.url || null,
-        uploadedAt: doc?.uploadedAt ? doc.uploadedAt.toISOString() : null
-      }));
-
-      const menus = Array.isArray(chef.portfolio?.menus)
-        ? chef.portfolio.menus.map(menu => ({
-            id: menu._id?.toString() || '',
-            name: menu.name,
-            description: menu.description,
-            price: menu.price,
-            type: menu.type,
-            category: menu.category,
-            minGuests: menu.minGuests,
-            maxGuests: menu.maxGuests,
-            image: menu.image || null,
-            isActive: menu.isActive
-          }))
-        : [];
-
-      return {
-        id: chef._id.toString(),
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        specialty: chef.specialty,
-        experience: chef.experience,
-        hourlyRate: chef.hourlyRate,
-        location: {
-          city: address.city || '',
-          zipCode: address.zipCode || ''
-        },
-        submittedAt: chef.createdAt ? chef.createdAt.toISOString() : new Date().toISOString(),
-        documents,
-        certifications: Array.isArray(chef.certifications)
-          ? chef.certifications.map(cert => ({
-              name: cert.name,
-              issuer: cert.issuer,
-              dateObtained: cert.dateObtained,
-              expiryDate: cert.expiryDate,
-              documentUrl: cert.documentUrl || null
-            }))
-          : [],
-        menus,
-        verification: chef.verification
-      };
-    });
+    const mappedChefs = pendingChefs.map(mapChefForAdmin).filter(Boolean);
 
     res.json({
       success: true,

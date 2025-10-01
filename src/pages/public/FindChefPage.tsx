@@ -248,8 +248,31 @@ const FindChefPage: React.FC = () => {
       };
 
       const { booking, quote } = await bookingService.createBooking(payload);
+
+      const fallbackQuote = (() => {
+        const basePriceValue = Number(booking?.pricing?.basePrice ?? 0);
+        const serviceFeeValue = Number(booking?.pricing?.serviceFee ?? 0);
+        const totalAmountValue = Number(booking?.pricing?.totalAmount ?? basePriceValue + serviceFeeValue);
+        const depositValue = Number(
+          quote?.depositAmount ??
+          booking?.pricing?.depositAmount ??
+          booking?.payment?.depositAmount ??
+          Math.round(totalAmountValue * 0.2)
+        );
+
+        return {
+          reference: `Q-${(booking?._id || booking?.id || Math.random().toString(36).slice(-6)).toString().slice(-6).toUpperCase()}`,
+          generatedAt: new Date().toISOString(),
+          basePrice: basePriceValue,
+          serviceFee: serviceFeeValue,
+          totalAmount: totalAmountValue,
+          depositAmount: depositValue,
+          remainingBalance: Math.max(totalAmountValue - depositValue, 0)
+        };
+      })();
+
       setCreatedBooking(booking);
-      setBookingQuote(quote);
+      setBookingQuote(quote || fallbackQuote);
       setBookingStep('quote');
     } catch (error: any) {
       console.error('Booking creation error:', error);

@@ -1,4 +1,5 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import { body, validationResult } from 'express-validator';
 import { protect, authorize } from '../middleware/auth.js';
 import Booking from '../models/Booking.js';
@@ -55,6 +56,7 @@ router.post('/', protect, [
     const serviceFee = Math.round(basePrice * 0.1); // 10% service fee
     const totalAmount = basePrice + serviceFee;
     const depositAmount = Math.round(totalAmount * 0.2); // 20% deposit as per business rules
+    const remainingBalance = Math.max(totalAmount - depositAmount, 0);
 
     // Create booking
     const dietaryRestrictions = Array.isArray(menu?.dietaryRestrictions)
@@ -88,7 +90,11 @@ router.post('/', protect, [
       pricing: {
         basePrice,
         serviceFee,
-        totalAmount
+        taxes: 0,
+        discount: 0,
+        totalAmount,
+        depositAmount,
+        remainingBalance
       },
       payment: {
         status: 'pending',
@@ -119,13 +125,14 @@ router.post('/', protect, [
       serviceFee,
       totalAmount,
       depositAmount,
-      remainingBalance: Math.max(totalAmount - depositAmount, 0)
+      remainingBalance
     };
-    
+
     res.status(201).json({
       success: true,
       message: 'Booking created successfully',
-      booking
+      booking,
+      quote
     });
 
   } catch (error) {

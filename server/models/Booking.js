@@ -49,7 +49,9 @@ const bookingSchema = new mongoose.Schema({
     serviceFee: { type: Number, required: true },
     taxes: { type: Number, default: 0 },
     discount: { type: Number, default: 0 },
-    totalAmount: { type: Number, required: true }
+    totalAmount: { type: Number, required: true },
+    depositAmount: { type: Number, default: 0 },
+    remainingBalance: { type: Number, default: 0 }
   },
   payment: {
     method: { type: String, enum: ['card', 'bank_transfer'], default: 'card' },
@@ -133,8 +135,17 @@ bookingSchema.pre('save', function(next) {
 
 // Calculate total amount
 bookingSchema.methods.calculateTotal = function() {
-  this.totalAmount = this.pricing.basePrice + this.pricing.serviceFee + this.pricing.taxes - this.pricing.discount;
-  this.pricing.depositAmount = Math.round(this.totalAmount * 0.3); // 30% deposit
+  const totalAmount = this.pricing.basePrice + this.pricing.serviceFee + this.pricing.taxes - this.pricing.discount;
+  this.pricing.totalAmount = totalAmount;
+
+  const depositAmount = Math.round(totalAmount * 0.3); // 30% deposit by default
+  this.pricing.depositAmount = depositAmount;
+  this.pricing.remainingBalance = Math.max(totalAmount - depositAmount, 0);
+
+  this.payment = this.payment || {};
+  if (!this.payment.depositAmount) {
+    this.payment.depositAmount = depositAmount;
+  }
 };
 
 // Indexes

@@ -54,6 +54,12 @@ export interface PendingChef {
   verification: { status: string; rejectionReason?: string | null };
 }
 
+export interface AdminChefListOptions {
+  status?: 'pending' | 'approved' | 'rejected' | 'all';
+  page?: number;
+  limit?: number;
+}
+
 export interface AdminUserCompany {
   name?: string;
   siret?: string;
@@ -246,6 +252,26 @@ const mapPendingChefFromApi = (chef: any): PendingChef => {
   };
 };
 
+const fetchChefsFromApi = async (options?: AdminChefListOptions): Promise<{
+  chefs: PendingChef[];
+  pagination: any;
+}> => {
+  const response = await apiClient.get('/admin/chefs', {
+    params: {
+      status: options?.status && options.status !== 'all' ? options.status : undefined,
+      page: options?.page,
+      limit: options?.limit
+    }
+  });
+
+  return {
+    chefs: Array.isArray(response.data.chefs)
+      ? response.data.chefs.map(mapPendingChefFromApi)
+      : [],
+    pagination: response.data.pagination
+  };
+};
+
 const mapAdminBookingFromApi = (booking: any): AdminBooking => {
   const client = booking?.client || {};
   const chefProfile = booking?.chef || {};
@@ -343,10 +369,15 @@ export const adminService = {
 
   // Chef Management
   async getPendingChefs(): Promise<PendingChef[]> {
-    const response = await apiClient.get('/admin/chefs/pending');
-    return Array.isArray(response.data.chefs)
-      ? response.data.chefs.map(mapPendingChefFromApi)
-      : [];
+    const { chefs } = await fetchChefsFromApi({ status: 'pending' });
+    return chefs;
+  },
+
+  async getChefs(options?: AdminChefListOptions): Promise<{
+    chefs: PendingChef[];
+    pagination: any;
+  }> {
+    return fetchChefsFromApi(options);
   },
 
   async verifyChef(chefId: string, status: 'approved' | 'rejected', reason?: string): Promise<void> {
