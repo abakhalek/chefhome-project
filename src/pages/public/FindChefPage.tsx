@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { chefService } from '../../services/chefService';
-import { Search, Star, Euro, MapPin, Filter, Users, Clock, Calendar, CheckCircle } from 'lucide-react';
+import { Search, Star, Euro, MapPin, Filter, Users, Clock, Calendar, CheckCircle, XCircle } from 'lucide-react';
 
 const FindChefPage: React.FC = () => {
   const [chefs, setChefs] = useState<any[]>([]);
@@ -76,13 +76,13 @@ const FindChefPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
-      <div className="container mx-auto px-6">
-        <h1 className="text-4xl font-bold text-gray-800 mb-8 text-center">Trouver votre Chef Idéal</h1>
+      <div className="container mx-auto px-4 md:px-6">
+        <h1 className="text-3xl md:text-4xl font-bold text-gray-800 mb-8 text-center">Trouver votre Chef Idéal</h1>
 
         {/* Filters Section */}
-        <div className="bg-white rounded-2xl shadow-lg p-6 mb-8">
+        <div className="bg-white rounded-2xl shadow-lg p-4 md:p-6 mb-8">
           <h2 className="text-xl font-bold text-gray-800 mb-4">Filtres Personnalisés</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <select value={serviceType} onChange={(e) => setServiceType(e.target.value)} className="p-3 border rounded-lg">
               <option value="">Type de Prestation</option>
               <option value="home-dining">Repas à domicile</option>
@@ -152,12 +152,12 @@ const FindChefPage: React.FC = () => {
         {/* Booking Modal */}
         {showBookingModal && selectedChef && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-              <div className="flex justify-between items-center p-6 border-b">
-                <h2 className="text-2xl font-bold text-gray-900">Réserver {selectedChef.user?.name}</h2>
+            <div className="bg-white rounded-2xl shadow-2xl w-full sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+              <div className="flex justify-between items-center p-4 md:p-6 border-b">
+                <h2 className="text-xl md:text-2xl font-bold text-gray-900">Réserver {selectedChef.user?.name}</h2>
                 <button onClick={() => setShowBookingModal(false)} className="text-gray-500 hover:text-gray-700"><XCircle size={24} /></button>
               </div>
-              <form onSubmit={handleBookingSubmit} className="p-6 space-y-6">
+              <form onSubmit={handleBookingSubmit} className="p-4 md:p-6 space-y-4">
                 <div>
                   <label className="block text-gray-700 text-sm font-bold mb-2">Type de Prestation</label>
                   <select className="w-full p-3 border rounded-lg">
@@ -166,7 +166,7 @@ const FindChefPage: React.FC = () => {
                     <option>Cours de cuisine</option>
                   </select>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-gray-700 text-sm font-bold mb-2">Date</label>
                     <input type="date" value={bookingDetails.date} onChange={(e) => setBookingDetails({...bookingDetails, date: e.target.value})} className="w-full p-3 border rounded-lg" required />
@@ -193,7 +193,7 @@ const FindChefPage: React.FC = () => {
                   <input type="text" value={bookingDetails.equipment} onChange={(e) => setBookingDetails({...bookingDetails, equipment: e.target.value})} placeholder="Ex: Four, Plaque de cuisson" className="w-full p-3 border rounded-lg" />
                 </div>
                 
-                <div className="flex justify-end space-x-4">
+                <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-4">
                   <button type="button" onClick={() => setShowBookingModal(false)} className="px-6 py-2 border rounded-lg text-gray-700">Annuler</button>
                   <button type="submit" className="px-6 py-2 bg-orange-500 text-white rounded-lg">Procéder au paiement</button>
                 </div>

@@ -31,8 +31,8 @@ const LoginPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-50">
       <PublicHeader />
-      <div className="flex flex-col justify-center items-center flex-grow">
-        <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg">
+      <div className="flex flex-col justify-center items-center flex-grow p-4">
+        <div className="max-w-sm sm:max-w-md w-full bg-white p-6 md:p-8 rounded-xl shadow-lg">
           <div className="flex justify-center mb-6">
             <span className="inline-block bg-gray-200 rounded-full p-3">
               <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-gray-500">
@@ -41,7 +41,7 @@ const LoginPage: React.FC = () => {
               </svg>
             </span>
           </div>
-          <h2 className="text-2xl font-bold text-center text-gray-800 mb-6">Connexion</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-center text-gray-800 mb-6">Connexion</h2>
           <form onSubmit={handleSubmit}>
             <div className="mb-4">
               <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
