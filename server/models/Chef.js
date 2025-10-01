@@ -8,6 +8,10 @@ const chefSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  profilePicture: { // New field for chef's profile picture
+    type: String,
+    default: '/chef-profile-images/default-profile.png' // Local placeholder default
+  },
   specialty: {
     type: String,
     required: [true, 'Specialty is required'],

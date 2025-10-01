@@ -63,7 +63,7 @@ app.use('/api/', limiter);
 
 // CORS configuration
 app.use(cors({
-  origin: '*', // More permissive for debugging
+  origin: 'http://localhost:5173', // Allow requests from the frontend development server
   credentials: true
 }));
 
@@ -76,6 +76,9 @@ app.use('/uploads', (req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*'); // Allow all origins
   next();
 }, express.static(path.join(__dirname, 'uploads')));
+
+// Serve static files for chef profile pictures
+app.use('/chef-profile-images', express.static(path.join(__dirname, '..', 'public', 'chef')));
 
 // Session middleware
 app.use(session({

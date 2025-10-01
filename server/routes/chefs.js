@@ -72,13 +72,29 @@ const uploadDoc = multer({
 });
 
 // Multer for local image storage
+const publicChefDirectory = path.join(__dirname, '..', 'public', 'chef');
+
+const ensurePublicChefDirectory = () => {
+  if (!fs.existsSync(publicChefDirectory)) {
+    fs.mkdirSync(publicChefDirectory, { recursive: true });
+  }
+};
+
+// Multer for local image storage
 const imageStorage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'uploads/images/') // Save to uploads/images/
+    try {
+      ensurePublicChefDirectory(); // Ensure public/image/chef directory exists
+      cb(null, publicChefDirectory); // Save to public/image/chef/
+    } catch (error) {
+      cb(error);
+    }
   },
   filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9)
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname))
+    // Assuming req.user is populated by the protect middleware
+    const userName = req.user?.name ? req.user.name.replace(/\s+/g, '_').toLowerCase() : 'unknown_chef';
+    const fileExtension = path.extname(file.originalname);
+    cb(null, `${userName}_profile${fileExtension}`);
   }
 });
 
@@ -247,6 +263,12 @@ router.get('/me/profile', protect, authorize('chef'), async (req, res) => {
 
     console.log('--- Chef Profile Data from DB ---');
     console.log(chef);
+    console.log('Chef Profile Picture URL:', chef.profilePicture); // Added log
+
+    // Ensure profilePicture is a local path if it's still a Cloudinary URL
+    if (chef.profilePicture && chef.profilePicture.startsWith('https://res.cloudinary.com/your-cloud-name/')) {
+      chef.profilePicture = '/chef-photos/default-profile.png';
+    }
 
     res.json({
       success: true,
@@ -409,6 +431,46 @@ router.put('/me/profile', protect, authorize('chef'), [
     res.status(500).json({
       success: false,
       message: 'Error updating chef profile'
+    });
+  }
+});
+
+// @desc    Upload chef profile picture
+// @route   POST /api/chefs/me/profile-picture
+// @access  Private (Chef)
+router.post('/me/profile-picture', protect, authorize('chef'), imageUpload.single('profilePicture'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No file uploaded'
+      });
+    }
+
+    const chef = await Chef.findOne({ user: req.user.id });
+    if (!chef) {
+      return res.status(404).json({
+        success: false,
+        message: 'Chef profile not found'
+      });
+    }
+
+    const imageUrl = `/chef-profile-images/${req.file.filename}`;
+
+    chef.profilePicture = imageUrl;
+    await chef.save();
+
+    res.json({
+      success: true,
+      message: 'Profile picture uploaded successfully',
+      profilePicture: imageUrl
+    });
+
+  } catch (error) {
+    console.error('Profile picture upload error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error uploading profile picture'
     });
   }
 });
@@ -786,7 +848,7 @@ router.post('/me/menus/:menuId/image', protect, authorize('chef'), imageUpload.s
       });
     }
 
-    const imageUrl = `/uploads/images/${req.file.filename}`;
+    const imageUrl = `/chef-profile-images/${req.file.filename}`;
 
     menu.image = imageUrl;
     menu.updatedAt = new Date();

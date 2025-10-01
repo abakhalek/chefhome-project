@@ -9,6 +9,8 @@ export interface ClientBooking {
   serviceType: string;
   status: string;
   totalAmount: number;
+    depositAmount?: number;
+  paymentStatus?: string;
 }
 
 export interface ClientProfile {
@@ -67,7 +69,9 @@ const mapClientBookingFromApi = (booking: any): ClientBooking => {
     time: eventDetails?.startTime || '',
     serviceType: booking?.serviceType || '',
     status: booking?.status || '',
-    totalAmount: Number(pricing?.totalAmount ?? 0)
+    totalAmount: Number(pricing?.totalAmount ?? 0),
+    depositAmount: booking?.payment?.depositAmount ? Number(booking.payment.depositAmount) : undefined,
+    paymentStatus: booking?.payment?.status
   };
 };
 

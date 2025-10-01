@@ -5,7 +5,9 @@ import Booking from '../models/Booking.js';
 import User from '../models/User.js';
 
 const router = express.Router();
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
+const isStripeConfigured = Boolean(stripeSecretKey);
 
 // @desc    Create payment intent for booking deposit
 // @route   POST /api/payments/create-intent
@@ -24,8 +26,25 @@ router.post('/create-intent', protect, async (req, res) => {
     }
 
     // Create payment intent
+    const depositAmount = Math.round(amount * 100);
+
+    if (!isStripeConfigured || !stripe) {
+      const mockPaymentIntentId = `mock_pi_${Date.now()}`;
+      booking.payment = booking.payment || {};
+      booking.payment.stripePaymentIntentId = mockPaymentIntentId;
+      booking.payment.depositAmount = amount;
+      await booking.save();
+
+      return res.json({
+        success: true,
+        clientSecret: `mock_client_secret_${mockPaymentIntentId}`,
+        paymentIntentId: mockPaymentIntentId,
+        mock: true
+      });
+    }
+
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amount * 100), // Convert to cents
+      amount: depositAmount,
       currency: 'eur',
       metadata: {
         bookingId: booking._id.toString(),
@@ -38,6 +57,7 @@ router.post('/create-intent', protect, async (req, res) => {
 
     // Update booking with payment intent
     booking.payment.stripePaymentIntentId = paymentIntent.id;
+    booking.payment.depositAmount = amount;
     await booking.save();
 
     res.json({
@@ -62,45 +82,68 @@ router.post('/confirm', protect, async (req, res) => {
   try {
     const { paymentIntentId, bookingId } = req.body;
 
-    // Retrieve payment intent from Stripe
-    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-
-    if (paymentIntent.status === 'succeeded') {
+    if (!isStripeConfigured || !stripe) {
       // Update booking payment status
       const booking = await Booking.findById(bookingId);
-      if (booking) {
-        booking.payment.status = 'deposit_paid';
-        booking.payment.depositPaidAt = new Date();
-        booking.status = 'confirmed';
-        
-        // Add to timeline
-        booking.timeline.push({
-          status: 'confirmed',
-          note: 'Deposit payment confirmed',
-          timestamp: new Date()
-        });
-
-        await booking.save();
-
-        // Send notification to chef via Socket.io
-        const io = req.app.get('io');
-        io.to(`user-${booking.chef}`).emit('booking-notification', {
-          type: 'booking_confirmed',
-          bookingId: booking._id,
-          message: 'New booking confirmed with deposit payment'
+      if (!booking) {
+        return res.status(404).json({
+          success: false,
+          message: 'Booking not found'
         });
       }
 
-      res.json({
-        success: true,
-        message: 'Payment confirmed successfully'
+      booking.payment = booking.payment || {};
+      booking.payment.status = 'deposit_paid';
+      booking.payment.depositPaidAt = new Date();
+      booking.status = 'confirmed';
+      booking.timeline.push({
+        status: 'confirmed',
+        note: 'Deposit payment confirmed (sandbox mode)',
+        timestamp: new Date()
       });
-    } else {
-      res.status(400).json({
+      await booking.save();
+
+      return res.json({
+        success: true,
+        message: 'Payment confirmed in sandbox mode',
+        mock: true
+      });
+    }
+
+    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
+
+    if (paymentIntent.status !== 'succeeded') {
+      return res.status(400).json({
         success: false,
         message: 'Payment not successful'
       });
     }
+    const booking = await Booking.findById(bookingId);
+    if (booking) {
+      booking.payment.status = 'deposit_paid';
+      booking.payment.depositPaidAt = new Date();
+      booking.status = 'confirmed';
+
+      booking.timeline.push({
+        status: 'confirmed',
+        note: 'Deposit payment confirmed',
+        timestamp: new Date()
+      });
+
+      await booking.save();
+
+      const io = req.app.get('io');
+      io.to(`user-${booking.chef}`).emit('booking-notification', {
+        type: 'booking_confirmed',
+        bookingId: booking._id,
+        message: 'New booking confirmed with deposit payment'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Payment confirmed successfully'
+    });
 
   } catch (error) {
     console.error('Payment confirmation error:', error);
@@ -135,9 +178,29 @@ router.post('/refund', protect, async (req, res) => {
     }
 
     // Create refund in Stripe
+    if (!isStripeConfigured || !stripe) {
+      booking.payment.status = 'refunded';
+      booking.payment.refundAmount = amount;
+      booking.payment.refundedAt = new Date();
+      booking.status = 'cancelled';
+      booking.cancellation = {
+        reason: reason,
+        cancelledAt: new Date(),
+        refundAmount: amount
+      };
+
+      await booking.save();
+
+      return res.json({
+        success: true,
+        message: 'Refund processed in sandbox mode',
+        mock: true
+      });
+    }
+
     const refund = await stripe.refunds.create({
       payment_intent: booking.payment.stripePaymentIntentId,
-      amount: Math.round(amount * 100), // Convert to cents
+      amount: Math.round(amount * 100),
       reason: 'requested_by_customer',
       metadata: {
         bookingId: booking._id.toString(),
@@ -177,6 +240,10 @@ router.post('/refund', protect, async (req, res) => {
 // @route   POST /api/payments/webhook
 // @access  Public
 router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+  if (!isStripeConfigured || !stripe) {
+    return res.json({ received: true, mock: true });
+  }
+
   const sig = req.headers['stripe-signature'];
   let event;
 

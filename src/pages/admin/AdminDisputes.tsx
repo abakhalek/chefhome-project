@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { adminService } from '../../services/adminService';
+import { adminService, AdminBooking } from '../../services/adminService';
 import { DisputeManagement } from '../../components/admin/DisputeManagement';
-import { Booking } from '../../services/adminService';
 
 const AdminDisputes: React.FC = () => {
-  const [disputes, setDisputes] = useState<Booking[]>([]);
+  const [disputes, setDisputes] = useState<AdminBooking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,26 +36,28 @@ const AdminDisputes: React.FC = () => {
   };
 
   const handleContactParties = (disputeId: string) => {
-    const dispute = disputes.find(d => d._id === disputeId);
+    const dispute = disputes.find(d => d.id === disputeId);
     if (dispute) {
       const clientEmail = dispute.client.email;
-      const chefEmail = dispute.chef.user.email;
+      const chefEmail = dispute.chef.email;
       window.location.href = `mailto:${clientEmail},${chefEmail}?subject=Regarding your dispute (ID: ${disputeId})`;
     }
   };
 
-  const mapBookingsToDisputes = (bookings: Booking[]) => {
+  const mapBookingsToDisputes = (bookings: AdminBooking[]) => {
     return bookings.map(booking => ({
-      id: booking._id,
+      id: booking.id,
       client: booking.client.name,
-      chef: booking.chef.user.name,
-      issue: `Dispute for booking #${booking._id}`,
-      description: `Booking on ${new Date(booking.eventDetails.date).toLocaleDateString()}`,
+      chef: booking.chef.name,
+      issue: `Dispute for booking #${booking.id}`,
+      description: booking.eventDetails.date
+        ? `Booking on ${new Date(booking.eventDetails.date).toLocaleDateString()}`
+        : 'Date à préciser',
       date: booking.createdAt,
       status: booking.status === 'disputed' ? 'open' : booking.status, // Example mapping
       priority: 'high', // This could be determined by some logic
-      amount: `${booking.pricing.totalAmount}€`,
-      bookingId: booking._id
+      amount: `${booking.pricing.totalAmount.toFixed(2)}€`,
+      bookingId: booking.id
     }));
   };
 

@@ -196,12 +196,65 @@ router.get('/users', async (req, res) => {
 router.get('/chefs/pending', async (req, res) => {
   try {
     const pendingChefs = await Chef.find({ 'verification.status': 'pending' })
-      .populate('user', 'name email phone createdAt')
+      .populate('user', 'name email phone createdAt address')
       .sort({ createdAt: -1 });
+
+      const mappedChefs = pendingChefs.map((chef) => {
+      const user = chef.user || {};
+      const address = user.address || {};
+
+      const documents = Object.entries(chef.documents || {}).map(([type, doc]) => ({
+        type,
+        url: doc?.url || null,
+        uploadedAt: doc?.uploadedAt ? doc.uploadedAt.toISOString() : null
+      }));
+
+      const menus = Array.isArray(chef.portfolio?.menus)
+        ? chef.portfolio.menus.map(menu => ({
+            id: menu._id?.toString() || '',
+            name: menu.name,
+            description: menu.description,
+            price: menu.price,
+            type: menu.type,
+            category: menu.category,
+            minGuests: menu.minGuests,
+            maxGuests: menu.maxGuests,
+            image: menu.image || null,
+            isActive: menu.isActive
+          }))
+        : [];
+
+      return {
+        id: chef._id.toString(),
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        specialty: chef.specialty,
+        experience: chef.experience,
+        hourlyRate: chef.hourlyRate,
+        location: {
+          city: address.city || '',
+          zipCode: address.zipCode || ''
+        },
+        submittedAt: chef.createdAt ? chef.createdAt.toISOString() : new Date().toISOString(),
+        documents,
+        certifications: Array.isArray(chef.certifications)
+          ? chef.certifications.map(cert => ({
+              name: cert.name,
+              issuer: cert.issuer,
+              dateObtained: cert.dateObtained,
+              expiryDate: cert.expiryDate,
+              documentUrl: cert.documentUrl || null
+            }))
+          : [],
+        menus,
+        verification: chef.verification
+      };
+    });
 
     res.json({
       success: true,
-      chefs: pendingChefs
+      chefs: mappedChefs
     });
 
   } catch (error) {
@@ -283,6 +336,68 @@ router.put('/chefs/:id/verify', async (req, res) => {
   }
 });
 
+// @desc    Update chef menu status (activate/deactivate)
+// @route   PUT /api/admin/chefs/:chefId/menus/:menuId/status
+// @access  Private (Admin)
+router.put('/chefs/:chefId/menus/:menuId/status', async (req, res) => {
+  try {
+    const { isActive } = req.body;
+
+    const chef = await Chef.findById(req.params.chefId).populate('user', 'email');
+    if (!chef) {
+      return res.status(404).json({
+        success: false,
+        message: 'Chef not found'
+      });
+    }
+
+    if (!chef.portfolio || !Array.isArray(chef.portfolio.menus)) {
+      return res.status(404).json({
+        success: false,
+        message: 'Chef has no menus registered'
+      });
+    }
+
+    const menu = chef.portfolio.menus.id(req.params.menuId);
+    if (!menu) {
+      return res.status(404).json({
+        success: false,
+        message: 'Menu not found'
+      });
+    }
+
+    menu.isActive = Boolean(isActive);
+    menu.updatedAt = new Date();
+
+    await chef.save();
+
+    res.json({
+      success: true,
+      message: `Menu ${menu.name} ${menu.isActive ? 'activé' : 'désactivé'} avec succès`,
+      menu: {
+        id: menu._id.toString(),
+        name: menu.name,
+        description: menu.description,
+        price: menu.price,
+        type: menu.type,
+        category: menu.category,
+        minGuests: menu.minGuests,
+        maxGuests: menu.maxGuests,
+        isActive: menu.isActive,
+        updatedAt: menu.updatedAt
+      }
+    });
+
+  } catch (error) {
+    console.error('Update chef menu status error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating chef menu status'
+    });
+  }
+});
+
+
 // @desc    Get all bookings with filters
 // @route   GET /api/admin/bookings
 // @access  Private (Admin)
@@ -317,7 +432,8 @@ router.get('/bookings', async (req, res) => {
       })
       .sort({ createdAt: -1 })
       .limit(limit * 1)
-      .skip((page - 1) * limit);
+      .skip((page - 1) * limit)
+      .lean();
 
     const total = await Booking.countDocuments(query);
 

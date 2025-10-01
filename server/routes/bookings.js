@@ -14,8 +14,20 @@ router.post('/', protect, [
   body('chefId').isMongoId().withMessage('Valid chef ID is required'),
   body('serviceType').isIn(['home-dining', 'private-events', 'cooking-classes', 'catering']),
   body('eventDetails.date').isISO8601().withMessage('Valid date is required'),
+  body('eventDetails.startTime')
+    .matches(/^\d{2}:\d{2}$/)
+    .withMessage('Valid start time is required (HH:mm)'),
+  body('eventDetails.duration')
+    .isInt({ min: 1, max: 12 })
+    .withMessage('Duration must be between 1 and 12 hours'),
   body('eventDetails.guests').isInt({ min: 1 }).withMessage('At least 1 guest required'),
-  body('location.address').notEmpty().withMessage('Address is required')
+  body('location.address').notEmpty().withMessage('Address is required'),
+  body('location.city').notEmpty().withMessage('City is required'),
+  body('location.zipCode').notEmpty().withMessage('Zip code is required'),
+  body('menu.dietaryRestrictions').optional().isArray().withMessage('dietaryRestrictions must be an array'),
+  body('menu.dietaryRestrictions.*').optional().isString(),
+  body('menu.allergies').optional().isArray().withMessage('allergies must be an array'),
+  body('menu.allergies.*').optional().isString()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -26,7 +38,7 @@ router.post('/', protect, [
       });
     }
 
-    const { chefId, serviceType, eventDetails, location, menu, specialRequests } = req.body;
+    const { chefId, serviceType, eventDetails, location, menu = {}, specialRequests } = req.body;
 
     // Verify chef exists and is available
     const chef = await Chef.findById(chefId).populate('user');
@@ -38,25 +50,49 @@ router.post('/', protect, [
     }
 
     // Calculate pricing
+    const eventDate = new Date(eventDetails.date);
     const basePrice = chef.hourlyRate * eventDetails.duration;
     const serviceFee = Math.round(basePrice * 0.1); // 10% service fee
     const totalAmount = basePrice + serviceFee;
+    const depositAmount = Math.round(totalAmount * 0.2); // 20% deposit as per business rules
 
     // Create booking
+    const dietaryRestrictions = Array.isArray(menu?.dietaryRestrictions)
+      ? menu.dietaryRestrictions.map(item => item?.toString().trim()).filter(Boolean)
+      : [];
+    const allergies = Array.isArray(menu?.allergies)
+      ? menu.allergies.map(item => item?.toString().trim()).filter(Boolean)
+      : [];
+
+    const bookingMenu = {
+      customRequests: specialRequests,
+      dietaryRestrictions,
+      allergies
+    };
+
+    if (menu?.selectedMenu && mongoose.Types.ObjectId.isValid(menu.selectedMenu)) {
+      bookingMenu.selectedMenu = menu.selectedMenu;
+    }
+
     const booking = await Booking.create({
       client: req.user.id,
       chef: chefId,
       serviceType,
-      eventDetails,
-      location,
-      menu: {
-        customRequests: specialRequests,
-        ...menu
+      eventDetails: {
+        ...eventDetails,
+        date: eventDate,
+        eventType: eventDetails.eventType || 'dinner'
       },
+      location,
+      menu: bookingMenu,
       pricing: {
         basePrice,
         serviceFee,
         totalAmount
+      },
+      payment: {
+        status: 'pending',
+        depositAmount
       },
       timeline: [{
         status: 'pending',
@@ -76,6 +112,16 @@ router.post('/', protect, [
       message: `New booking request from ${req.user.name}`
     });
 
+    const quote = {
+      reference: `Q-${booking._id.toString().slice(-6).toUpperCase()}`,
+      generatedAt: new Date().toISOString(),
+      basePrice,
+      serviceFee,
+      totalAmount,
+      depositAmount,
+      remainingBalance: Math.max(totalAmount - depositAmount, 0)
+    };
+    
     res.status(201).json({
       success: true,
       message: 'Booking created successfully',

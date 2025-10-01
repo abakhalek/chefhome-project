@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import PublicHeader from '../../components/layout/PublicHeader';
 
 const RegisterPage: React.FC = () => {
   const [name, setName] = useState('');
@@ -48,8 +49,10 @@ const RegisterPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg">
+    <div className="min-h-screen bg-gray-50">
+      <PublicHeader />
+      <div className="flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-lg">
         <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-4 text-center">Inscription</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -106,7 +109,7 @@ const RegisterPage: React.FC = () => {
                 onClick={handleGoogleRegister}
                 className="w-full flex items-center justify-center bg-white border border-gray-300 text-gray-700 font-bold py-3 px-4 rounded-lg hover:bg-gray-50 transition duration-300"
             >
-                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M15.5 16.5c-2.2 0-4-1.8-4-4s1.8-4 4-4 4 1.8 4 4-1.8 4-4 4Z"/><path d="M15.5 16.5c-2.2 0-4-1.8-4-4s1.8-4 4-4 4 1.8 4 4-1.8 4-4 4Z"/><path d="M8.5 12.5c0-2.2 1.8-4 4-4"/><path d="M12.5 8.5c2.2 0 4 1.8 4 4"/><path d="M12 22a10 10 0 0 0 10-10h0a10 10 0 0 0-10-10h0a10 10 0 0 0-10 10h0a10 10 0 0 0 10 10Z"/><path d="M12 22a10 10 0 0 0 10-10h0a10 10 0 0 0-10-10h0a10 10 0 0 0-10 10h0a10 10 0 0 0 10 10Z"/><path d="M12.5 15.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/></svg>
+                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2"><path d="M15.5 16.5c-2.2 0-4-1.8-4-4s1.8-4 4-4 4 1.8 4 4-1.8 4-4 4Z"/><path d="M15.5 16.5c-2.2 0-4-1.8-4-4s1.8-4 4-4 4 1.8 4 4-1.8 4-4 4Z"/><path d="M8.5 12.5c0-2.2 1.8-4 4-4"/><path d="M12.5 8.5c2.2 0 4 1.8 4 4"/><path d="M12 22a10 10 0 0 0 10-10h0a10 10 0 0 0-10-10h0a10 10 0 0 0-10 10h0a10 10 0 0 0 10 10Z"/><path d="M12 22a10 10 0 0 0 10-10h0a10 10 0 0 0-10-10h0a10 10 0 0 0-10 10h0a10 10 0 0 0 10 10Z"/><path d="M12.5 15.5a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z"/></svg>
                 Google
             </button>
             <button
@@ -114,14 +117,11 @@ const RegisterPage: React.FC = () => {
                 onClick={handleFacebookRegister}
                 className="w-full flex items-center justify-center bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition duration-300"
             >
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-2"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>
                 Facebook
             </button>
+          </div>
         </div>
-
-        <p className="text-center text-gray-600 text-sm mt-6">
-          Déjà un compte ? <Link to="/login" className="font-bold text-orange-500 hover:text-orange-600">Connectez-vous</Link>
-        </p>
       </div>
     </div>
   );

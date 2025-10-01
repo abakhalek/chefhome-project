@@ -22,6 +22,7 @@ export interface ChefProfile {
   address: string;
   city: string;
   zipCode: string;
+  profilePicture?: string; // Add this line
   specialty: string;
   experience: number;
   hourlyRate: number;
@@ -139,6 +140,7 @@ const mapChefProfileFromApi = (chef: any): ChefProfile => {
     address: address.street || '',
     city: address.city || '',
     zipCode: address.zipCode || '',
+    profilePicture: chef.profilePicture || undefined, // Add this line
     specialty: chef.specialty || '',
     experience: chef.experience || 0,
     hourlyRate: chef.hourlyRate || 0,
@@ -323,6 +325,18 @@ export const chefService = {
   async updateProfile(profileData: Partial<ChefProfile>): Promise<ChefProfile> {
     const response = await apiClient.put('/chefs/me/profile', profileData);
    return mapChefProfileFromApi(response.data.chef);
+  },
+
+  async uploadProfilePicture(file: File): Promise<{ profilePicture: string }> {
+    const formData = new FormData();
+    formData.append('profilePicture', file);
+
+    const response = await apiClient.post('/chefs/me/profile-picture', formData, {
+      headers: {
+         'Content-Type': 'multipart/form-data'
+      }
+    });
+    return response.data;
   },
 
   async uploadDocument(documentType: string, file: File): Promise<UploadedChefDocument> {

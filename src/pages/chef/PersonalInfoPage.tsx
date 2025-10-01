@@ -9,6 +9,9 @@ const PersonalInfoPage: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<Record<string, File | null>>({});
   const [uploadingType, setUploadingType] = useState<string | null>(null);
+  const [profilePictureFile, setProfilePictureFile] = useState<File | null>(null);
+  const [isUploadingProfilePicture, setIsUploadingProfilePicture] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false); // New state for form submission
   const [newCertification, setNewCertification] = useState({ name: '', issuer: '', dateObtained: '', expiryDate: '' });
   const [newServiceArea, setNewServiceArea] = useState({ city: '', zipCodes: '', maxDistance: 0 });
 
@@ -29,6 +32,8 @@ const PersonalInfoPage: React.FC = () => {
       try {
         const fetchedProfile = await chefService.getProfile();
         setProfile(fetchedProfile);
+        console.log('Frontend - Fetched Chef Profile:', fetchedProfile); // Added log
+        console.log('Frontend - Profile Picture URL:', fetchedProfile.profilePicture); // Added log
       } catch (error) {
         console.error("Failed to fetch chef profile:", error);
       } finally {
@@ -75,6 +80,31 @@ const PersonalInfoPage: React.FC = () => {
       alert("Erreur lors du téléchargement du document.");
     } finally {
       setUploadingType(null);
+    }
+  };
+
+  const handleProfilePictureChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setProfilePictureFile(e.target.files[0]);
+    }
+  };
+
+  const handleProfilePictureUpload = async () => {
+    if (!profilePictureFile) {
+      alert("Veuillez sélectionner une photo de profil à télécharger.");
+      return;
+    }
+    setIsUploadingProfilePicture(true);
+    try {
+      const response = await chefService.uploadProfilePicture(profilePictureFile);
+      setProfile(prev => ({ ...prev, profilePicture: response.profilePicture }));
+      setProfilePictureFile(null);
+      alert("Photo de profil téléchargée avec succès !");
+    } catch (error) {
+      console.error("Failed to upload profile picture:", error);
+      alert("Erreur lors du téléchargement de la photo de profil.");
+    } finally {
+      setIsUploadingProfilePicture(false);
     }
   };
 
@@ -136,7 +166,7 @@ const PersonalInfoPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile) return;
-    setLoading(true);
+    setIsSubmitting(true); // Use isSubmitting for form submission
     try {
       const updatedProfile = await chefService.updateProfile(profile);
       setProfile(updatedProfile);
@@ -146,7 +176,7 @@ const PersonalInfoPage: React.FC = () => {
       console.error("Failed to update profile:", error);
       alert("Erreur lors de la mise à jour du profil.");
     } finally {
-      setLoading(false);
+      setIsSubmitting(false); // Reset isSubmitting
     }
   };
 
@@ -161,6 +191,45 @@ const PersonalInfoPage: React.FC = () => {
   return (
     <div className="p-6">
       <h1 className="text-3xl font-bold text-gray-900 mb-6">Informations Personnelles</h1>
+      {/* Profile Picture Section */}
+      <div className="mb-6 flex flex-col items-center">
+        <h2 className="text-xl font-bold text-gray-900 mb-4">Photo de Profil</h2>
+        <div className="relative w-32 h-32 rounded-full overflow-hidden border-2 border-gray-300 mb-4">
+          <img
+            src={profile.profilePicture || 'https://via.placeholder.com/128'} // Use a placeholder if no picture
+            alt="Profile"
+            className="w-full h-full object-cover"
+          />
+          {isEditing && (
+            <label htmlFor="profilePictureInput" className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 text-white cursor-pointer opacity-0 hover:opacity-100 transition-opacity">
+              <Edit size={24} />
+            </label>
+          )}
+        </div>
+        {isEditing && (
+          <div className="flex items-center space-x-2">
+            <input
+              type="file"
+              id="profilePictureInput"
+              accept="image/*"
+              onChange={handleProfilePictureChange}
+              className="hidden"
+            />
+            {profilePictureFile && (
+              <span className="text-sm text-gray-500 truncate max-w-[160px]">{profilePictureFile.name}</span>
+            )}
+            <button
+              type="button"
+              onClick={handleProfilePictureUpload}
+              disabled={!profilePictureFile || isUploadingProfilePicture}
+              className="bg-blue-600 text-white px-4 py-2 rounded-md flex items-center space-x-2 disabled:opacity-50"
+            >
+              {isUploadingProfilePicture ? 'Envoi...' : 'Changer la photo'}
+              <Upload size={18} />
+            </button>
+          </div>
+        )}
+      </div>
       <div className="bg-white rounded-2xl shadow-lg p-6">
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -376,7 +445,9 @@ const PersonalInfoPage: React.FC = () => {
             ) : (
               <>
                 <button type="button" onClick={() => setIsEditing(false)} className="px-4 py-2 border border-gray-300 rounded-md">Annuler</button>
-                <button type="submit" className="px-4 py-2 bg-green-600 text-white rounded-md">Enregistrer</button>
+                <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-green-600 text-white rounded-md disabled:opacity-50">
+                  {isSubmitting ? 'Enregistrement...' : 'Enregistrer'}
+                </button>
               </>
             )}
           </div>
