@@ -2,7 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { chefService } from '../../services/chefService';
 import { Search, Star, Euro, MapPin, Filter, Users, Clock, Calendar, CheckCircle, XCircle } from 'lucide-react';
 
+import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+
 const FindChefPage: React.FC = () => {
+  const { isAuthenticated, role } = useAuth();
+  const navigate = useNavigate();
   const [chefs, setChefs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, pages: 1 });
@@ -62,6 +67,14 @@ const FindChefPage: React.FC = () => {
   };
 
   const handleBookChef = (chef: any) => {
+    if (!isAuthenticated) {
+      navigate('/login');
+      return;
+    }
+    if (role !== 'client') {
+      alert('Seuls les clients peuvent réserver un chef.');
+      return;
+    }
     setSelectedChef(chef);
     setShowBookingModal(true);
   };

@@ -1,5 +1,6 @@
 import express from 'express';
 import { protect, authorize } from '../middleware/auth.js';
+import { body, validationResult } from 'express-validator';
 import User from '../models/User.js';
 import Chef from '../models/Chef.js';
 import Booking from '../models/Booking.js';
@@ -9,6 +10,48 @@ const router = express.Router();
 
 // All routes require admin authorization
 router.use(protect, authorize('admin'));
+
+const enrichUserWithStats = async (userDoc) => {
+  if (!userDoc) {
+    return null;
+  }
+
+  const user = userDoc.toObject({ virtuals: true });
+  user.id = user._id?.toString();
+
+  let status = user.isActive ? 'active' : 'suspended';
+
+  if (user.role === 'chef') {
+    const chef = await Chef.findOne({ user: user._id });
+    if (chef) {
+      user.chefStats = {
+        verificationStatus: chef.verification?.status,
+        rating: chef.rating?.average,
+        totalBookings: chef.stats?.totalBookings || 0
+      };
+      if (chef.verification?.status && chef.verification.status !== 'approved' && status !== 'suspended') {
+        status = 'pending';
+      }
+    }
+  } else if (user.role === 'client' || user.role === 'b2b') {
+    const bookingStats = await Booking.aggregate([
+      { $match: { client: user._id } },
+      {
+        $group: {
+          _id: null,
+          totalBookings: { $sum: 1 },
+          totalSpent: { $sum: '$pricing.totalAmount' }
+        }
+      }
+    ]);
+
+    user.bookingStats = bookingStats[0] || { totalBookings: 0, totalSpent: 0 };
+  }
+
+  user.status = status;
+
+  return user;
+};
 
 // @desc    Get admin dashboard stats
 // @route   GET /api/admin/stats
@@ -125,37 +168,7 @@ router.get('/users', async (req, res) => {
     const total = await User.countDocuments(query);
 
     // Get additional stats for each user
-    const usersWithStats = await Promise.all(
-      users.map(async (user) => {
-        const userObj = user.toObject();
-        
-        if (user.role === 'chef') {
-          const chef = await Chef.findOne({ user: user._id });
-          if (chef) {
-            userObj.chefStats = {
-              verificationStatus: chef.verification.status,
-              rating: chef.rating.average,
-              totalBookings: chef.stats.totalBookings
-            };
-          }
-        } else if (user.role === 'client' || user.role === 'b2b') {
-          const bookingStats = await Booking.aggregate([
-            { $match: { client: user._id } },
-            {
-              $group: {
-                _id: null,
-                totalBookings: { $sum: 1 },
-                totalSpent: { $sum: '$pricing.totalAmount' }
-              }
-            }
-          ]);
-          
-          userObj.bookingStats = bookingStats[0] || { totalBookings: 0, totalSpent: 0 };
-        }
-        
-        return userObj;
-      })
-    );
+    const usersWithStats = await Promise.all(users.map((user) => enrichUserWithStats(user)));
 
     res.json({
       success: true,
@@ -458,9 +471,12 @@ router.put('/users/:id/status', async (req, res) => {
       reason
     });
 
+    const updatedUser = await enrichUserWithStats(await User.findById(req.params.id).select('-password'));
+
     res.json({
       success: true,
-      message: `User ${status === 'active' ? 'activated' : 'suspended'} successfully`
+      message: `User ${status === 'active' ? 'activated' : 'suspended'} successfully`,
+      user: updatedUser
     });
 
   } catch (error) {
@@ -471,6 +487,215 @@ router.put('/users/:id/status', async (req, res) => {
     });
   }
 });
+
+  // @desc    Get a single user with stats
+// @route   GET /api/admin/users/:id
+// @access  Private (Admin)
+router.get('/users/:id', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select('-password');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const enrichedUser = await enrichUserWithStats(user);
+
+    res.json({
+      success: true,
+      user: enrichedUser
+    });
+
+  } catch (error) {
+    console.error('Get user details error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching user details'
+    });
+  }
+});
+
+// @desc    Create a new user
+// @route   POST /api/admin/users
+// @access  Private (Admin)
+router.post('/users', [
+  body('name').trim().notEmpty().withMessage('Name is required'),
+  body('email').isEmail().withMessage('Valid email is required').normalizeEmail(),
+  body('phone').trim().notEmpty().withMessage('Phone number is required'),
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+  body('role').optional().isIn(['client', 'chef', 'admin', 'b2b']).withMessage('Invalid role'),
+  body('isVerified').optional().isBoolean().withMessage('isVerified must be a boolean'),
+  body('isActive').optional().isBoolean().withMessage('isActive must be a boolean')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        errors: errors.array()
+      });
+    }
+
+    const { name, email, phone, password, role = 'client', isVerified = false, isActive = true, company } = req.body;
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is already in use'
+      });
+    }
+
+    const user = await User.create({
+      name,
+      email,
+      phone,
+      password,
+      role,
+      isVerified,
+      isActive,
+      company
+    });
+
+    const createdUser = await enrichUserWithStats(await User.findById(user._id).select('-password'));
+
+    res.status(201).json({
+      success: true,
+      message: 'User created successfully',
+      user: createdUser
+    });
+
+  } catch (error) {
+    console.error('Create user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error creating user'
+    });
+  }
+});
+
+// @desc    Update a user
+// @route   PUT /api/admin/users/:id
+// @access  Private (Admin)
+router.put('/users/:id', [
+  body('name').optional().trim().isLength({ min: 2 }).withMessage('Name must be at least 2 characters'),
+  body('email').optional().isEmail().withMessage('Valid email is required').normalizeEmail(),
+  body('phone').optional().trim().notEmpty().withMessage('Phone number cannot be empty'),
+  body('role').optional().isIn(['client', 'chef', 'admin', 'b2b']).withMessage('Invalid role'),
+  body('isVerified').optional().isBoolean().withMessage('isVerified must be a boolean'),
+  body('isActive').optional().isBoolean().withMessage('isActive must be a boolean')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        errors: errors.array()
+      });
+    }
+
+    const user = await User.findById(req.params.id).select('+password');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const { email, name, phone, role, isVerified, isActive, password, company } = req.body;
+
+    if (email && email !== user.email) {
+      const existingUser = await User.findOne({ email, _id: { $ne: user._id } });
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email is already in use'
+        });
+      }
+      user.email = email;
+    }
+
+    if (name) user.name = name;
+    if (phone) user.phone = phone;
+    if (role) user.role = role;
+    if (typeof isVerified === 'boolean') user.isVerified = isVerified;
+    if (typeof isActive === 'boolean') user.isActive = isActive;
+    if (company) user.company = { ...user.company, ...company };
+
+    if (password) {
+      user.password = password;
+    }
+
+    await user.save();
+
+    const updatedUser = await enrichUserWithStats(await User.findById(req.params.id).select('-password'));
+
+    res.json({
+      success: true,
+      message: 'User updated successfully',
+      user: updatedUser
+    });
+
+  } catch (error) {
+    console.error('Update user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating user'
+    });
+  }
+});
+
+// @desc    Delete or deactivate a user
+// @route   DELETE /api/admin/users/:id
+// @access  Private (Admin)
+router.delete('/users/:id', async (req, res) => {
+  try {
+    const { hardDelete = false } = req.query;
+
+    if (hardDelete === 'true' || hardDelete === true) {
+      const deletedUser = await User.findByIdAndDelete(req.params.id);
+      if (!deletedUser) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      return res.json({
+        success: true,
+        message: 'User deleted permanently'
+      });
+    }
+
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    user.isActive = false;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'User deactivated successfully'
+    });
+
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting user'
+    });
+  }
+});
+
 
 // @desc    Send message to user
 // @route   POST /api/admin/users/:id/message

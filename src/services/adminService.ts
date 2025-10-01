@@ -36,20 +36,62 @@ export interface Dispute {
   amount: string;
 }
 
+export interface AdminUserCompany {
+  name?: string;
+  siret?: string;
+  address?: string;
+  contactPerson?: string;
+}
+
+export interface AdminUserStats {
+  totalBookings: number;
+  totalSpent?: number;
+  rating?: number;
+  verificationStatus?: string;
+}
+
+
 export interface AdminUser {
   id: string;
   name: string;
   email: string;
-  role: 'client' | 'chef' | 'b2b';
+  role: 'client' | 'chef' | 'admin' | 'b2b';
+  phone?: string;
   status: 'active' | 'suspended' | 'pending';
-  joinDate: string;
-  lastLogin: string;
-  totalBookings?: number;
-  totalSpent?: string;
-  rating?: number;
-  verificationStatus?: string;
-  company?: string;
+  isActive: boolean;
+  isVerified: boolean;
+  createdAt: string;
+  updatedAt: string;
+  lastLogin?: string;
+  company?: AdminUserCompany;
+  chefStats?: {
+    verificationStatus?: string;
+    rating?: number;
+    totalBookings?: number;
+  };
+  bookingStats?: {
+    totalBookings: number;
+    totalSpent: number;
+  };
 }
+
+const mapAdminUser = (user: any): AdminUser => ({
+  id: user.id || user._id,
+  name: user.name,
+  email: user.email,
+  role: user.role,
+  phone: user.phone,
+  status: user.status || (user.isActive ? 'active' : 'suspended'),
+  isActive: user.isActive,
+  isVerified: user.isVerified,
+  createdAt: user.createdAt,
+  updatedAt: user.updatedAt,
+  lastLogin: user.lastLogin,
+  company: user.company,
+  chefStats: user.chefStats,
+  bookingStats: user.bookingStats
+});
+
 
 export const adminService = {
   // Dashboard & Analytics
@@ -93,11 +135,54 @@ export const adminService = {
     pagination: any;
   }> {
     const response = await apiClient.get('/admin/users', { params });
-    return response.data;
+    return {
+      users: response.data.users.map(mapAdminUser),
+      pagination: response.data.pagination
+    };
   },
 
-  async updateUserStatus(userId: string, status: 'active' | 'suspended', reason?: string): Promise<void> {
-    await apiClient.put(`/admin/users/${userId}/status`, { status, reason });
+  async getUser(userId: string): Promise<AdminUser> {
+    const response = await apiClient.get(`/admin/users/${userId}`);
+    return mapAdminUser(response.data.user);
+  },
+
+  async createUser(data: {
+    name: string;
+    email: string;
+    phone: string;
+    password: string;
+    role?: string;
+    isActive?: boolean;
+    isVerified?: boolean;
+    company?: AdminUserCompany;
+  }): Promise<AdminUser> {
+    const response = await apiClient.post('/admin/users', data);
+    return mapAdminUser(response.data.user);
+  },
+
+  async updateUser(userId: string, data: Partial<{
+    name: string;
+    email: string;
+    phone: string;
+    password: string;
+    role: string;
+    isActive: boolean;
+    isVerified: boolean;
+    company: AdminUserCompany;
+  }>): Promise<AdminUser> {
+    const response = await apiClient.put(`/admin/users/${userId}`, data);
+    return mapAdminUser(response.data.user);
+  },
+
+  async deleteUser(userId: string, options?: { hardDelete?: boolean }): Promise<void> {
+    await apiClient.delete(`/admin/users/${userId}`, {
+      params: options?.hardDelete ? { hardDelete: options.hardDelete } : undefined
+    });
+  },
+
+  async updateUserStatus(userId: string, status: 'active' | 'suspended', reason?: string): Promise<AdminUser> {
+    const response = await apiClient.put(`/admin/users/${userId}/status`, { status, reason });
+    return mapAdminUser(response.data.user);
   },
 
   async sendMessageToUser(userId: string, subject: string, message: string): Promise<void> {

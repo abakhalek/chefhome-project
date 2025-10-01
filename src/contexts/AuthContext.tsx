@@ -17,8 +17,9 @@ interface AuthContextType {
   isAuthenticated: boolean;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>; // Changed to match AuthModal
+  register: (userData: { name: string, email: string, password: string, role: 'client' | 'chef', phone: string }) => Promise<void>;
   googleLogin: () => Promise<void>;
+  facebookLogin: () => Promise<void>;
   logout: () => void;
   updateUser: (userData: Partial<User>) => void;
 }
@@ -109,15 +110,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const register = async (email: string, password: string) => {
-    console.log('[AUTH_CONTEXT] Register action initiated for:', email);
+  const register = async (userData: { name: string, email: string, password: string, role: 'client' | 'chef', phone: string }) => {
+    console.log('[AUTH_CONTEXT] Register action initiated for:', userData.email);
     try {
-      // Assuming register also returns token and user
-      const response = await authService.register({ email, password }); // Adjusted to match AuthModal input
+      const response = await authService.register(userData);
       handleAuthSuccess(response.token, response.user);
-      console.log('[AUTH_CONTEXT] Register action successful for:', email);
+      console.log('[AUTH_CONTEXT] Register action successful for:', userData.email);
     } catch (error) {
-      console.error('[AUTH_CONTEXT] Register action failed for:', email, error);
+      console.error('[AUTH_CONTEXT] Register action failed for:', userData.email, error);
       throw error;
     }
   };
@@ -134,6 +134,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const facebookLogin = async () => {
+    console.log('[AUTH_CONTEXT] Facebook Login action initiated');
+    try {
+      const response = await authService.facebookLogin();
+      handleAuthSuccess(response.token, response.user);
+      console.log('[AUTH_CONTEXT] Facebook Login action successful');
+    } catch (error) {
+      console.error('[AUTH_CONTEXT] Facebook Login action failed:', error);
+      throw error;
+    }
+  };
   const logout = () => {
     console.log('[AUTH_CONTEXT] Logout action initiated');
     localStorage.removeItem('token');
@@ -155,6 +166,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     login,
     register,
     googleLogin,
+    facebookLogin,
     logout,
     updateUser
   };

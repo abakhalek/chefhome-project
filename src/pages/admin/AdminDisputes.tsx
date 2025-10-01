@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { adminService } from '../../services/adminService';
 import { DisputeManagement } from '../../components/admin/DisputeManagement';
-import { LoadingSpinner } from '../../components/common';
 import { Booking } from '../../services/adminService';
 
 const AdminDisputes: React.FC = () => {
@@ -12,6 +11,7 @@ const AdminDisputes: React.FC = () => {
   const fetchDisputes = async () => {
     setLoading(true);
     try {
+      // Assuming getDisputes fetches bookings with disputes
       const { disputes: fetchedDisputes } = await adminService.getDisputes();
       setDisputes(fetchedDisputes);
     } catch (err) {
@@ -26,9 +26,9 @@ const AdminDisputes: React.FC = () => {
     fetchDisputes();
   }, []);
 
-  const handleResolveDispute = async (disputeId: number, resolution: string, refundAmount?: number) => {
+  const handleResolveDispute = async (disputeId: string, resolution: string, refundAmount?: number) => {
     try {
-      await adminService.resolveDispute(String(disputeId), resolution, refundAmount);
+      await adminService.resolveDispute(disputeId, resolution, refundAmount);
       fetchDisputes(); // Refresh the list after resolving
     } catch (err) {
       console.error('Failed to resolve dispute:', err);
@@ -36,8 +36,8 @@ const AdminDisputes: React.FC = () => {
     }
   };
 
-  const handleContactParties = (disputeId: number) => {
-    const dispute = disputes.find(d => d._id === String(disputeId));
+  const handleContactParties = (disputeId: string) => {
+    const dispute = disputes.find(d => d._id === disputeId);
     if (dispute) {
       const clientEmail = dispute.client.email;
       const chefEmail = dispute.chef.user.email;
@@ -53,20 +53,12 @@ const AdminDisputes: React.FC = () => {
       issue: `Dispute for booking #${booking._id}`,
       description: `Booking on ${new Date(booking.eventDetails.date).toLocaleDateString()}`,
       date: booking.createdAt,
-      status: 'open', // This needs to be mapped from booking status
+      status: booking.status === 'disputed' ? 'open' : booking.status, // Example mapping
       priority: 'high', // This could be determined by some logic
       amount: `${booking.pricing.totalAmount}€`,
       bookingId: booking._id
     }));
   };
-
-  if (loading) {
-    return <div className="p-6 text-center"><LoadingSpinner /></div>;
-  }
-
-  if (error) {
-    return <div className="p-6 text-center text-red-500">{error}</div>;
-  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
