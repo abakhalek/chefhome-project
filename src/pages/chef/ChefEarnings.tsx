@@ -1,30 +1,48 @@
 
-import React, { useState, useEffect } from 'react';
-import { chefService, Earnings } from '../../services/chefService';
-import { TrendingUp, Euro, Calendar, Star, Download } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { chefService } from '../../services/chefService';
+import { useAuth } from '../../hooks/useAuth';
+import { TrendingUp, Euro, Calendar, Star } from 'lucide-react';
+
+interface Earning {
+  _id: string;
+  totalEarnings: number;
+  commission: number;
+  bookingCount: number;
+}
+
+interface EarningsSummary {
+  totalEarnings?: number;
+  totalCommission?: number;
+  totalBookings?: number;
+  averageRating?: number;
+  averagePerMission?: number;
+}
 
 const ChefEarnings: React.FC = () => {
-  const [earnings, setEarnings] = useState<Earnings[]>([]);
-  const [summary, setSummary] = useState<any>(null);
+  const { user } = useAuth();
+  const [earnings, setEarnings] = useState<Earning[]>([]);
+  const [summary, setSummary] = useState<EarningsSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('30d');
 
-  const fetchEarnings = async () => {
+  const fetchEarnings = useCallback(async () => {
+    if (!user?.chefId) return;
     setLoading(true);
     try {
-      const response = await chefService.getEarnings({ period });
-      setEarnings(response.earnings?.daily || []);
-      setSummary(response.earnings?.total);
+      const response = await chefService.getChefEarnings(user.chefId, { period });
+      setEarnings(response.data.earnings?.daily || []);
+      setSummary(response.data.earnings?.total ?? null);
     } catch (error) {
       console.error("Failed to fetch earnings:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.chefId, period]);
 
   useEffect(() => {
     fetchEarnings();
-  }, [period]);
+  }, [fetchEarnings]);
 
   if (loading) {
     return <div className="p-6 text-center">Loading...</div>;
@@ -77,18 +95,18 @@ const ChefEarnings: React.FC = () => {
             <thead>
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">Date</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">Client</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">Net perçu</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">Statut</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">Revenus</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">Commission</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500">Missions</th>
               </tr>
             </thead>
             <tbody>
               {earnings.map((earning) => (
-                <tr key={earning.id}>
-                  <td className="px-6 py-4 text-sm text-gray-900">{new Date(earning.date).toLocaleDateString('fr-FR')}</td>
-                  <td className="px-6 py-4 text-sm text-gray-900">{earning.client}</td>
-                  <td className="px-6 py-4 text-sm font-bold text-green-600">{earning.netAmount.toFixed(2)}€</td>
-                  <td className="px-6 py-4 text-sm"><span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-600">{earning.status}</span></td>
+                <tr key={earning._id}>
+                  <td className="px-6 py-4 text-sm text-gray-900">{new Date(earning._id).toLocaleDateString('fr-FR')}</td>
+                  <td className="px-6 py-4 text-sm font-bold text-green-600">{earning.totalEarnings.toFixed(2)}€</td>
+                  <td className="px-6 py-4 text-sm text-gray-900">{earning.commission.toFixed(2)}€</td>
+                  <td className="px-6 py-4 text-sm text-gray-900">{earning.bookingCount}</td>
                 </tr>
               ))}
             </tbody>

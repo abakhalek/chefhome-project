@@ -1,5 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { chefService, ChefProfile, ChefMenu, Mission, Earnings } from '../services/chefService';
+
+const getErrorMessage = (unknownError: unknown) => {
+  if (unknownError instanceof Error) {
+    return unknownError.message;
+  }
+  return 'Une erreur inattendue est survenue.';
+};
 
 export const useChef = () => {
   const [profile, setProfile] = useState<ChefProfile | null>(null);
@@ -9,26 +16,33 @@ export const useChef = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const handleError = useCallback((unknownError: unknown) => {
+    setError(getErrorMessage(unknownError));
+  }, []);
+
+  type GetMissionsParams = Parameters<typeof chefService.getMissions>[0];
+  type GetEarningsParams = Parameters<typeof chefService.getEarnings>[0];
+
   // Profile Management
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     try {
       setLoading(true);
       const profileData = await chefService.getProfile();
       setProfile(profileData);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      handleError(unknownError);
     } finally {
       setLoading(false);
     }
-  };
+  }, [handleError]);
 
   const updateProfile = async (profileData: Partial<ChefProfile>) => {
     try {
       setLoading(true);
       const updatedProfile = await chefService.updateProfile(profileData);
       setProfile(updatedProfile);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      handleError(unknownError);
     } finally {
       setLoading(false);
     }
@@ -53,30 +67,30 @@ export const useChef = () => {
           }
         });
       }
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      handleError(unknownError);
     } finally {
       setLoading(false);
     }
   };
 
   // Menu Management
-  const loadMenus = async () => {
+  const loadMenus = useCallback(async () => {
     try {
       const menusData = await chefService.getMenus();
       setMenus(menusData);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      handleError(unknownError);
     }
-  };
+  }, [handleError]);
 
   const createMenu = async (menuData: Partial<ChefMenu>) => {
     try {
       setLoading(true);
       const newMenu = await chefService.createMenu(menuData);
       setMenus(prev => [...prev, newMenu]);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      handleError(unknownError);
     } finally {
       setLoading(false);
     }
@@ -87,8 +101,8 @@ export const useChef = () => {
       setLoading(true);
       const updatedMenu = await chefService.updateMenu(menuId, menuData);
       setMenus(prev => prev.map(menu => (menu._id === menuId ? updatedMenu : menu)));
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      handleError(unknownError);
     } finally {
       setLoading(false);
     }
@@ -98,20 +112,20 @@ export const useChef = () => {
     try {
       await chefService.deleteMenu(menuId);
       setMenus(prev => prev.filter(menu => menu._id !== menuId));
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      handleError(unknownError);
     }
   };
 
   // Mission Management
-  const loadMissions = async (params?: any) => {
+  const loadMissions = useCallback(async (params?: GetMissionsParams) => {
     try {
       const { missions: missionData } = await chefService.getMissions(params);
       setMissions(missionData);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      handleError(unknownError);
     }
-  };
+  }, [handleError]);
 
   const acceptMission = async (missionId: string) => {
     try {
@@ -121,8 +135,8 @@ export const useChef = () => {
           ? { ...mission, status: 'confirmed' as const }
           : mission
       ));
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      handleError(unknownError);
     }
   };
 
@@ -134,20 +148,20 @@ export const useChef = () => {
           ? { ...mission, status: 'cancelled' as const }
           : mission
       ));
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      handleError(unknownError);
     }
   };
 
   // Earnings Management
-  const loadEarnings = async (params?: any) => {
+  const loadEarnings = useCallback(async (params?: GetEarningsParams) => {
     try {
       const { earnings: earningsData } = await chefService.getEarnings(params);
       setEarnings(earningsData.daily || []);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      handleError(unknownError);
     }
-  };
+  }, [handleError]);
 
   const exportEarnings = async (format: 'csv' | 'pdf', period?: string) => {
     try {
@@ -160,8 +174,8 @@ export const useChef = () => {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      handleError(unknownError);
     }
   };
 
@@ -170,7 +184,7 @@ export const useChef = () => {
     loadMenus();
     loadMissions();
     loadEarnings();
-  }, []);
+  }, [loadProfile, loadMenus, loadMissions, loadEarnings]);
 
   return {
     // State

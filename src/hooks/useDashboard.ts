@@ -1,13 +1,25 @@
-import { useState, useEffect } from 'react';
-import { dashboardService, DashboardData } from '../services/dashboardService';
+import { useState, useEffect, useCallback } from 'react';
+import {
+  dashboardService,
+  DashboardData,
+  PlatformAnalytics,
+  ChefAnalytics
+} from '../services/dashboardService';
 
 export const useDashboard = (userRole: 'chef' | 'client' | 'admin' | 'b2b') => {
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
-  const [analytics, setAnalytics] = useState<any>(null);
+  const [analytics, setAnalytics] = useState<PlatformAnalytics | ChefAnalytics | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loadDashboard = async () => {
+  const getErrorMessage = (unknownError: unknown) => {
+    if (unknownError instanceof Error) {
+      return unknownError.message;
+    }
+    return 'Une erreur inattendue est survenue.';
+  };
+
+  const loadDashboard = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -31,31 +43,29 @@ export const useDashboard = (userRole: 'chef' | 'client' | 'admin' | 'b2b') => {
       }
 
       setDashboardData(data);
-    } catch (err: any) {
-      setError(err.message || 'Error loading dashboard');
+    } catch (unknownError) {
+      setError(getErrorMessage(unknownError));
     } finally {
       setLoading(false);
     }
-  };
+  }, [userRole]);
 
-  const loadAnalytics = async (period?: string) => {
+  const loadAnalytics = useCallback(async (period?: string) => {
     try {
       setLoading(true);
-      
-      let analyticsData;
       if (userRole === 'admin') {
-        analyticsData = await dashboardService.getPlatformAnalytics(period);
+        const analyticsData = await dashboardService.getPlatformAnalytics(period);
+        setAnalytics(analyticsData);
       } else if (userRole === 'chef') {
-        analyticsData = await dashboardService.getChefAnalytics(period);
+        const analyticsData = await dashboardService.getChefAnalytics(period);
+        setAnalytics(analyticsData);
       }
-      
-      setAnalytics(analyticsData);
-    } catch (err: any) {
-      setError(err.message || 'Error loading analytics');
+    } catch (unknownError) {
+      setError(getErrorMessage(unknownError));
     } finally {
       setLoading(false);
     }
-  };
+  }, [userRole]);
 
   const refreshDashboard = () => {
     loadDashboard();
@@ -65,7 +75,7 @@ export const useDashboard = (userRole: 'chef' | 'client' | 'admin' | 'b2b') => {
     if (userRole) {
       loadDashboard();
     }
-  }, [userRole]);
+  }, [userRole, loadDashboard]);
 
   return {
     dashboardData,

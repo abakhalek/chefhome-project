@@ -1,43 +1,40 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { chefService } from '../../services/chefService';
+import { useAuth } from '../../hooks/useAuth';
+import { Notification } from '../../types';
 import { Bell, CheckCircle, XCircle } from 'lucide-react';
 
-interface Notification {
-  id: string;
-  type: 'booking' | 'system' | 'message' | 'alert';
-  message: string;
-  read: boolean;
-  createdAt: string;
-}
-
 const NotificationsPage: React.FC = () => {
-  const [notifications, setNotifications] = useState<Notification[]>([
-    { id: '1', type: 'booking', message: 'Nouvelle demande de réservation de Sophie Martin.', read: false, createdAt: '2024-01-20T10:00:00Z' },
-    { id: '2', type: 'system', message: 'Votre profil a été mis à jour.', read: true, createdAt: '2024-01-19T15:30:00Z' },
-    { id: '3', type: 'message', message: 'Nouveau message de Pierre Dubois.', read: false, createdAt: '2024-01-18T11:45:00Z' },
-    { id: '4', type: 'alert', message: 'Rappel: Mettez à jour vos disponibilités pour Février.', read: true, createdAt: '2024-01-17T09:00:00Z' },
-  ]);
-  const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // In a real app, you would fetch notifications from an API
-  // useEffect(() => {
-  //   const fetchNotifications = async () => {
-  //     setLoading(true);
-  //     try {
-  //       const response = await chefService.getNotifications(); // Assuming such a service exists
-  //       setNotifications(response.notifications);
-  //     } catch (error) {
-  //       console.error("Failed to fetch notifications:", error);
-  //     } finally {
-  //       setLoading(false);
-  //     }
-  //   };
-  //   fetchNotifications();
-  // }, []);
+  const fetchNotifications = useCallback(async () => {
+    if (!user?.chefId) return;
+    setLoading(true);
+    try {
+      const response = await chefService.getChefNotifications(user.chefId);
+      setNotifications(response.data || []);
+    } catch (error) {
+      console.error("Failed to fetch notifications:", error);
+    } finally {
+      setLoading(false);
+    }
+  }, [user?.chefId]);
 
-  const markAsRead = (id: string) => {
-    setNotifications(prev => prev.map(notif => notif.id === id ? { ...notif, read: true } : notif));
-    // In a real app, you would call an API to mark as read
+  useEffect(() => {
+    fetchNotifications();
+  }, [fetchNotifications]);
+
+  const markAsRead = async (notificationId: string) => {
+    if (!user?.chefId) return;
+    try {
+      await chefService.markChefNotificationAsRead(user.chefId, notificationId);
+      setNotifications(prev => prev.map(notif => notif.id === notificationId ? { ...notif, read: true } : notif));
+    } catch (error) {
+      console.error('Failed to mark notification as read:', error);
+    }
   };
 
   const deleteNotification = (id: string) => {
@@ -66,15 +63,14 @@ const NotificationsPage: React.FC = () => {
                 </div>
                 <div className="flex space-x-2">
                   {!notif.read && (
-                    <button onClick={() => markAsRead(notif.id)} className="text-green-600 hover:text-green-800">
-                      <CheckCircle size={20} />
-                    </button>
-                  )}
-                  <button onClick={() => deleteNotification(notif.id)} className="text-red-600 hover:text-red-800">
-                    <XCircle size={20} />
-                  </button>
-                </div>
-              </div>
+                                      <button onClick={() => markAsRead(notif.id)} className="text-green-600 hover:text-green-800">
+                                        <CheckCircle size={20} />
+                                      </button>
+                                    )}
+                                    {/* <button onClick={() => deleteNotification(notif.id)} className="text-red-600 hover:text-red-800">
+                                      <XCircle size={20} />
+                                    </button> */}
+                                  </div>              </div>
             ))}
           </div>
         )}

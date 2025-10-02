@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { chefService, ChefProfile, UploadedChefDocument } from '../../services/chefService';
-import { Upload, FileText, CheckCircle, XCircle } from 'lucide-react';
 import DocumentUpload from '../../components/common/DocumentUpload';
 
 type ChefDocumentKey = keyof ChefProfile['documents'];
@@ -42,8 +41,8 @@ const DocumentsPage: React.FC = () => {
           ...prevProfile.documents,
           [documentKey]: {
             uploaded: Boolean(document.url),
-            url: document.url || undefined,
-            uploadedAt: document.uploadedAt || new Date().toISOString(),
+            url: document.url ?? null,
+            uploadedAt: document.uploadedAt ?? new Date().toISOString(),
           },
         },
       };
@@ -64,7 +63,7 @@ const DocumentsPage: React.FC = () => {
           ...prevProfile.documents,
           [documentKey]: {
             uploaded: false,
-            url: undefined,
+            url: null,
             uploadedAt: null,
           },
         },

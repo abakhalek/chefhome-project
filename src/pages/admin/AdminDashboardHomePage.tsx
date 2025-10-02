@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { adminService } from '../../services/adminService';
+import { adminService, AdminAnalytics as AdminAnalyticsData } from '../../services/adminService';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const AdminDashboardHomePage: React.FC = () => {
-  const [analytics, setAnalytics] = useState<any>(null);
+  const [analytics, setAnalytics] = useState<AdminAnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

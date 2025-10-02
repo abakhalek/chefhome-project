@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, CheckCircle, MessageSquare, X } from 'lucide-react';
+import { X } from 'lucide-react';
 
 export type Dispute = {
   id: string;

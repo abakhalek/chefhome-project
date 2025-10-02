@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { chefService, ChefProfile } from '../../services/chefService';
-import { Plus, Edit, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 
 const CertificationsPage: React.FC = () => {
   const [profile, setProfile] = useState<Partial<ChefProfile> | null>(null);

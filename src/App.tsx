@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AuthProvider } from './contexts/AuthContext';
+import { useAuth } from './hooks/useAuth';
 import { NotificationProvider } from './contexts/NotificationContext';
 
 // Layouts
@@ -15,6 +16,7 @@ import HowItWorksPage from './pages/public/HowItWorksPage';
 import AboutPage from './pages/public/AboutPage';
 import ContactPage from './pages/public/ContactPage';
 import FaqPage from './pages/public/FaqPage';
+import ChefMenuPage from './pages/public/ChefMenuPage';
 
 import AdminDashboardPage from './pages/admin/AdminDashboardPage';
 import AdminDashboardHomePage from './pages/admin/AdminDashboardHomePage';
@@ -75,6 +77,7 @@ function App() {
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/faq" element={<FaqPage />} />
+        <Route path="/chefs/:chefId/menus" element={<ChefMenuPage />} />
       </Route>
 
       {/* Auth Routes */}

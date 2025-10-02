@@ -41,7 +41,9 @@ export interface User {
 // Chef Types
 export interface Chef {
   id: string;
+  _id?: string;
   user: User;
+  profilePicture?: string | null;
   specialty: string;
   experience: number;
   hourlyRate: number;
@@ -112,7 +114,7 @@ export interface Chef {
 // Menu Types
 export interface Menu {
   id: string;
-  chef: string;
+  chef?: string;
   name: string;
   description: string;
   category: string;
@@ -129,18 +131,20 @@ export interface Menu {
   ingredients: string[];
   allergens: string[];
   dietaryOptions: string[];
-  images: string[];
+  image?: string | null;
+  images?: string[];
   isActive: boolean;
-  bookingCount: number;
-  averageRating: number;
-  tags: string[];
-  createdAt: string;
-  updatedAt: string;
+  bookingCount?: number;
+  averageRating?: number;
+  tags?: string[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // Booking Types
 export interface Booking {
   id: string;
+  _id?: string;
   client: User;
   chef: Chef;
   serviceType: 'home-dining' | 'private-events' | 'cooking-classes' | 'catering';
@@ -163,7 +167,12 @@ export interface Booking {
     accessInstructions?: string;
   };
   menu: {
-    selectedMenu?: string;
+    selectedMenu?: string | null;
+    name?: string;
+    type?: 'forfait' | 'horaire' | 'custom';
+    price?: number;
+    minGuests?: number;
+    maxGuests?: number;
     customRequests?: string;
     dietaryRestrictions: string[];
     allergies: string[];
@@ -174,6 +183,8 @@ export interface Booking {
     taxes: number;
     discount: number;
     totalAmount: number;
+    depositAmount: number;
+    remainingBalance: number;
   };
   payment: {
     method: 'card' | 'bank_transfer';
@@ -286,7 +297,7 @@ export interface Notification {
   type: string;
   title: string;
   message: string;
-  data: any;
+  data: Record<string, unknown>;
   read: boolean;
   readAt?: string;
   actionUrl?: string;
@@ -302,7 +313,7 @@ export interface Notification {
 }
 
 // API Response Types
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   success: boolean;
   message?: string;
   data?: T;
@@ -343,8 +354,8 @@ export interface DashboardStats {
 
 export interface DashboardData {
   stats: DashboardStats;
-  recentActivity?: any[];
-  upcomingEvents?: any[];
-  alerts?: any;
-  [key: string]: any;
+  recentActivity?: unknown[];
+  upcomingEvents?: unknown[];
+  alerts?: unknown;
+  [key: string]: unknown;
 }

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { chefService, ChefMenu } from '../../services/chefService';
-import { Upload, Save, X, Plus, ArrowLeft } from 'lucide-react';
+import { Save, X, Plus, ArrowLeft } from 'lucide-react';
 
 const AddMenuPage: React.FC = () => {
   const navigate = useNavigate();
@@ -26,7 +26,7 @@ const AddMenuPage: React.FC = () => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
 
-  const handleInputChange = (field: keyof ChefMenu, value: any) => {
+  const handleInputChange = <K extends keyof ChefMenu>(field: K, value: ChefMenu[K]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 

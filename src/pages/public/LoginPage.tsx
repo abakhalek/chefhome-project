@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../hooks/useAuth';
 import PublicHeader from '../../components/layout/PublicHeader';
 
 const LoginPage: React.FC = () => {
@@ -13,7 +13,7 @@ const LoginPage: React.FC = () => {
     setError(null);
     try {
       await login(demoEmail, demoPassword);
-    } catch (err) {
+    } catch (_) { // eslint-disable-line @typescript-eslint/no-unused-vars
       setError('Email ou mot de passe incorrect.');
     }
   };
@@ -23,7 +23,7 @@ const LoginPage: React.FC = () => {
     setError(null);
     try {
       await login(email, password);
-    } catch (err) {
+    } catch (_) { // eslint-disable-line @typescript-eslint/no-unused-vars
       setError('Email ou mot de passe incorrect.');
     }
   };

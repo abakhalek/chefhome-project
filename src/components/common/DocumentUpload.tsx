@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { chefService, ChefDocumentStatus, UploadedChefDocument } from '../../services/chefService';
-import { API_CONFIG } from '../../utils/constants';
 
 interface DocumentUploadProps {
   documentType: string;
@@ -15,8 +14,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ documentType, documentS
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-   const serverBaseUrl = API_CONFIG.BASE_URL.replace(/\/api\/?$/, '');
-  const fullDocumentUrl = documentStatus.url ? `${serverBaseUrl}${documentStatus.url}` : '';
+  const fullDocumentUrl = documentStatus.url ?? '';
   const formattedUploadedAt = documentStatus.uploadedAt
     ? new Date(documentStatus.uploadedAt).toLocaleString()
     : null;
@@ -38,9 +36,9 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ documentType, documentS
       const document = await chefService.uploadDocument(documentType, file);
       onUpload(documentType, document);
       setFile(null);
-    } catch (err) {
+    } catch (error) {
       setError('Upload failed. Please try again.');
-      console.error(err);
+      console.error(error);
     } finally {
       setUploading(false);
     }
@@ -53,8 +51,9 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ documentType, documentS
       await chefService.deleteDocument(documentType);
       onDelete(documentType);
       setFile(null);
-    } catch (err) {
+    } catch (error) {
       setError('Failed to delete document. Please try again.');
+      console.error(error);
     } finally {
       setDeleting(false);
     }
@@ -95,7 +94,9 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ documentType, documentS
               View document
             </a>
           </p>
-          <p className="text-sm text-gray-500">Uploaded at: {documentStatus.uploadedAt}</p>
+          {formattedUploadedAt && (
+            <p className="text-sm text-gray-500">Uploaded at: {formattedUploadedAt}</p>
+          )}
         </div>
       ) : (
        <p className="text-sm text-gray-500">No document uploaded yet.</p>

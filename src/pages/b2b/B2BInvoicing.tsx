@@ -1,31 +1,46 @@
-import React, { useState, useEffect } from 'react';
-import { b2bService } from '../../services/b2bService';
-import { FileText, Download } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { b2bService, B2BInvoice } from '../../services/b2bService';
+import { Download } from 'lucide-react';
 
 const B2BInvoicing: React.FC = () => {
-  const [invoices, setInvoices] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<B2BInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('');
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
-  const fetchInvoices = async () => {
+  const fetchInvoices = useCallback(async () => {
     setLoading(true);
     try {
-      const { invoices } = await b2bService.getInvoices({ status: filterStatus || undefined });
-      setInvoices(invoices);
+      const { invoices: fetchedInvoices } = await b2bService.getInvoices({ status: filterStatus || undefined });
+      setInvoices(fetchedInvoices);
     } catch (error) {
       console.error("Failed to fetch invoices:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterStatus]);
 
   useEffect(() => {
     fetchInvoices();
-  }, [filterStatus]);
+  }, [fetchInvoices]);
 
-  const handleDownloadInvoice = (invoiceId: string) => {
-    alert(`Téléchargement de la facture ${invoiceId} (fonctionnalité à implémenter)`);
-    // In a real app, you would call an API to get the invoice file
+  const handleDownloadInvoice = async (invoiceId: string) => {
+    try {
+      setDownloadingId(invoiceId);
+      const blob = await b2bService.generateInvoice(invoiceId);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `facture_${invoiceId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download invoice:', error);
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   if (loading) {
@@ -53,11 +68,15 @@ const B2BInvoicing: React.FC = () => {
             <div key={invoice.id} className="bg-white rounded-2xl shadow-lg p-6 flex justify-between items-center">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Facture #{invoice.id}</h2>
-                <p className="text-gray-600">Montant: {invoice.amount}€</p>
-                <p className="text-gray-700">Statut: {invoice.status}</p>
+                <p className="text-gray-600">Montant: {invoice.total?.toFixed(2) ?? '—'}€</p>
+                <p className="text-gray-700">Statut: {invoice.status ?? 'Inconnu'}</p>
               </div>
-              <button onClick={() => handleDownloadInvoice(invoice.id)} className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center space-x-2">
-                <Download size={18} /><span>Télécharger</span>
+              <button
+                onClick={() => handleDownloadInvoice(invoice.id)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center space-x-2 disabled:opacity-50"
+                disabled={downloadingId === invoice.id}
+              >
+                <Download size={18} /><span>{downloadingId === invoice.id ? 'Téléchargement...' : 'Télécharger'}</span>
               </button>
             </div>
           ))}

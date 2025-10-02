@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { MessageCircle, Send, User } from 'lucide-react';
 
@@ -19,14 +18,8 @@ interface Conversation {
   messages: Message[];
 }
 
-const MessagesPage: React.FC = () => {
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
-  const [newMessage, setNewMessage] = useState('');
-  const [loading, setLoading] = useState(false);
-
-  // Initial mock data
-  const initialConversations: Conversation[] = [
+// Initial mock data
+const initialConversations: Conversation[] = [
     {
       id: 'conv1',
       clientName: 'Sophie Martin',
@@ -49,7 +42,12 @@ const MessagesPage: React.FC = () => {
         { id: 'msg4', sender: 'client', senderName: 'Pierre Dubois', content: 'Bonjour Chef, confirmez-vous ma réservation pour le 25 ?', timestamp: '2024-01-19T10:00:00Z' },
       ],
     },
-  ];
+];
+
+const MessagesPage: React.FC = () => {
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [newMessage, setNewMessage] = useState('');
 
   useEffect(() => {
     setConversations(initialConversations);

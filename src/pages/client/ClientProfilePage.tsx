@@ -26,7 +26,7 @@ const ClientProfilePage: React.FC = () => {
     'Paléo', 'Cétogène', 'Diabétique'
   ];
 
-  const handleInputChange = (field: string, value: any) => {
+  const handleInputChange = (field: string, value: string) => {
     setProfileData(prev => ({
       ...prev,
       [field]: value
@@ -51,7 +51,7 @@ const ClientProfilePage: React.FC = () => {
         console.log('Profile updated:', profileData);
         setLoading(false);
       }, 1000);
-    } catch (error) {
+    } catch (_) { // eslint-disable-line @typescript-eslint/no-unused-vars
       setLoading(false);
     }
   };

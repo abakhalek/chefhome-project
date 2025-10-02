@@ -1,5 +1,18 @@
-import { useState, useEffect } from 'react';
-import { b2bService, B2BMission, B2BChef, B2BAnalytics } from '../services/b2bService';
+import { useState, useEffect, useCallback } from 'react';
+import {
+  b2bService,
+  B2BMission,
+  B2BChef,
+  B2BAnalytics,
+  B2BChefSearchFilters
+} from '../services/b2bService';
+
+const getErrorMessage = (unknownError: unknown) => {
+  if (unknownError instanceof Error) {
+    return unknownError.message;
+  }
+  return 'Une erreur inattendue est survenue.';
+};
 
 export const useB2B = () => {
   const [missions, setMissions] = useState<B2BMission[]>([]);
@@ -8,81 +21,85 @@ export const useB2B = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  type GetMissionsParams = Parameters<typeof b2bService.getMissions>[0];
+  type GetAnalyticsParam = Parameters<typeof b2bService.getAnalytics>[0];
+
   // Mission Management
-  const loadMissions = async (params?: any) => {
+  const loadMissions = useCallback(async (params?: GetMissionsParams) => {
     try {
       setLoading(true);
       const { missions: missionData } = await b2bService.getMissions(params);
       setMissions(missionData);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      setError(getErrorMessage(unknownError));
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const createMission = async (missionData: any) => {
+  const createMission = useCallback(async (missionData: Partial<B2BMission>) => {
     try {
       setLoading(true);
-      const newMission = await b2bService.createMission(missionData);
+      const newMission = await b2bService.postMission(missionData);
       setMissions(prev => [...prev, newMission]);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      setError(getErrorMessage(unknownError));
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const assignChefToMission = async (missionId: string, chefId: string) => {
+  const assignChefToMission = useCallback(async (missionId: string, chefId: string) => {
     try {
       await b2bService.assignChefToMission(missionId, chefId);
       setMissions(prev => prev.map(mission => 
         mission.id === missionId 
-          ? { ...mission, status: 'in_progress' as const, assignedChef: chefId }
+          ? { ...mission, status: 'in_progress', assignedChef: chefId }
           : mission
       ));
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      setError(getErrorMessage(unknownError));
     }
-  };
+  }, []);
 
   // Chef Management
-  const searchChefs = async (filters: any) => {
+  const searchChefs = useCallback(async (filters?: B2BChefSearchFilters) => {
     try {
       setLoading(true);
       const { chefs: chefData } = await b2bService.searchChefs(filters);
       setChefs(chefData);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      setError(getErrorMessage(unknownError));
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // Analytics
-  const loadAnalytics = async (period?: string) => {
+  const loadAnalytics = useCallback(async (period?: GetAnalyticsParam) => {
     try {
       const analyticsData = await b2bService.getAnalytics(period);
       setAnalytics(analyticsData);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      setError(getErrorMessage(unknownError));
     }
-  };
+  }, []);
 
-  const generateInvoice = async (missionId: string) => {
+  const generateInvoice = useCallback(async (missionId: string) => {
     try {
       const invoice = await b2bService.generateInvoice(missionId);
       return invoice;
-    } catch (err: any) {
-      setError(err.message);
-      throw err;
+    } catch (unknownError) {
+      const message = getErrorMessage(unknownError);
+      setError(message);
+      throw new Error(message);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadMissions();
     loadAnalytics();
-  }, []);
+  }, [loadMissions, loadAnalytics]);
 
   return {
     // State
@@ -96,10 +113,10 @@ export const useB2B = () => {
     loadMissions,
     createMission,
     assignChefToMission,
-    
+
     // Chef actions
     searchChefs,
-    
+
     // Analytics
     loadAnalytics,
     generateInvoice

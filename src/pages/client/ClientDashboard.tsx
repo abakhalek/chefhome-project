@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { clientService, ClientProfile, ClientBooking } from '../../services/clientService';
 import { Link } from 'react-router-dom';
-import { User, Calendar, Euro, ChefHat, MessageCircle, XCircle } from 'lucide-react';
+import { User, ChefHat, XCircle } from 'lucide-react';
 
 const ClientDashboard: React.FC = () => {
   const [profile, setProfile] = useState<ClientProfile | null>(null);
@@ -103,10 +103,13 @@ const ClientDashboard: React.FC = () => {
           <div className="space-y-4">
             {upcomingBookings.map(booking => (
               <div key={booking.id} className="border border-blue-200 rounded-lg p-4 bg-blue-50 flex justify-between items-center">
-                <div>
-                  <p className="font-bold text-gray-900">Chef {booking.chef.name}</p>
-                  <p className="text-sm text-gray-600">{booking.serviceType} le {new Date(booking.date).toLocaleDateString()} à {booking.time}</p>
-                </div>
+              <div>
+                <p className="font-bold text-gray-900">Chef {booking.chef.name}</p>
+                <p className="text-sm text-gray-600">{booking.serviceType} le {new Date(booking.date).toLocaleDateString()} à {booking.time}</p>
+                {booking.menu?.name && (
+                  <p className="text-xs text-gray-500">Menu : {booking.menu.name}</p>
+                )}
+              </div>
                 <div className="flex items-center space-x-3">
                   <span className="font-bold text-green-600">{booking.totalAmount.toFixed(2)}€</span>
                   <button onClick={() => handleCancelBooking(booking.id)} className="text-red-500 hover:text-red-700"><XCircle size={20} /></button>
@@ -126,10 +129,13 @@ const ClientDashboard: React.FC = () => {
           <div className="space-y-4">
             {pastBookings.map(booking => (
               <div key={booking.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50 flex justify-between items-center">
-                <div>
-                  <p className="font-bold text-gray-900">Chef {booking.chef.name}</p>
-                  <p className="text-sm text-gray-600">{booking.serviceType} le {new Date(booking.date).toLocaleDateString()} à {booking.time}</p>
-                </div>
+              <div>
+                <p className="font-bold text-gray-900">Chef {booking.chef.name}</p>
+                <p className="text-sm text-gray-600">{booking.serviceType} le {new Date(booking.date).toLocaleDateString()} à {booking.time}</p>
+                {booking.menu?.name && (
+                  <p className="text-xs text-gray-500">Menu : {booking.menu.name}</p>
+                )}
+              </div>
                 <span className="font-bold text-green-600">{booking.totalAmount.toFixed(2)}€</span>
               </div>
             ))}

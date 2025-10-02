@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
 import PublicHeader from '../../components/layout/PublicHeader';
 
 const RegisterPage: React.FC = () => {
@@ -18,7 +18,7 @@ const RegisterPage: React.FC = () => {
   const handleGoogleRegister = async () => {
     try {
       await googleLogin();
-    } catch (err) {
+    } catch (_) { // eslint-disable-line @typescript-eslint/no-unused-vars
       setError('Google registration failed. Please try again.');
     }
   };
@@ -26,7 +26,7 @@ const RegisterPage: React.FC = () => {
   const handleFacebookRegister = async () => {
     try {
       await facebookLogin();
-    } catch (err) {
+    } catch (_) { // eslint-disable-line @typescript-eslint/no-unused-vars
       setError('Facebook registration failed. Please try again.');
     }
   };
@@ -41,7 +41,7 @@ const RegisterPage: React.FC = () => {
     try {
       await register({ name, email, password, role, phone });
       navigate('/login'); // Redirect to login after successful registration
-    } catch (err) {
+    } catch (_) { // eslint-disable-line @typescript-eslint/no-unused-vars
       setError('Failed to register. Please try again.');
     } finally {
       setLoading(false);

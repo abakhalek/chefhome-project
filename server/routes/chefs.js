@@ -1,12 +1,13 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
-import { protect, authorize } from '../middleware/auth.js';
+import { protect, authorize, canAccessChefData } from '../middleware/auth.js';
 import multer from 'multer';
 import Chef from '../models/Chef.js';
 import User from '../models/User.js';
 import Booking from '../models/Booking.js';
 import path from 'path';
 import fs from 'fs';
+import mongoose from 'mongoose';
 import { fileURLToPath } from 'url';
 
 const router = express.Router();
@@ -72,11 +73,78 @@ const uploadDoc = multer({
 });
 
 // Multer for local image storage
-const publicChefDirectory = path.join(__dirname, '..', 'public', 'chef');
+const publicChefDirectory = path.join(__dirname, '..', '..', 'public', 'chef');
 
-const ensurePublicChefDirectory = () => {
-  if (!fs.existsSync(publicChefDirectory)) {
-    fs.mkdirSync(publicChefDirectory, { recursive: true });
+const ensureDirectoryExists = (targetPath) => {
+  if (!fs.existsSync(targetPath)) {
+    fs.mkdirSync(targetPath, { recursive: true });
+  }
+};
+
+
+const getChefIdentifier = (req) => {
+  const rawId = req.user?.id || req.user?._id;
+  return rawId ? rawId.toString() : 'unknown-chef';
+};
+
+const sanitizeFileNameFragment = (rawValue) => {
+  const value = (rawValue ?? '').toString();
+  const normalised = value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  const cleaned = normalised
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return cleaned || 'chef';
+};
+
+const formatTimestampForFilename = () => {
+  const now = new Date();
+  const pad = (value) => value.toString().padStart(2, '0');
+  return `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+};
+
+const normalizeProfileImagePath = (inputPath) => {
+  if (!inputPath) {
+    return null;
+  }
+
+  const withoutHost = inputPath.replace(/^https?:\/\/[^/]+/i, '');
+  const trimmedPath = withoutHost.replace(/^\/+/, '');
+
+  if (!trimmedPath.startsWith('chef-images/')) {
+    return null;
+  }
+
+  return trimmedPath.replace(/^chef-images\//, '');
+};
+
+const removeExistingProfileImage = async (urlPath) => {
+  if (!urlPath || urlPath.includes('default-profile')) {
+    return;
+  }
+
+  try {
+    const relativePath = normalizeProfileImagePath(urlPath);
+    if (!relativePath) {
+      return;
+    }
+
+    const absolutePath = path.resolve(publicChefDirectory, relativePath);
+
+    if (!absolutePath.startsWith(publicChefDirectory)) {
+      console.warn('Skipping deletion for profile image outside allowed directory:', absolutePath);
+      return;
+    }
+
+    await fs.promises.unlink(absolutePath);
+  } catch (error) {
+    if (error.code !== 'ENOENT') {
+      console.error('Error removing existing profile image:', error);
+    }
   }
 };
 
@@ -84,17 +152,19 @@ const ensurePublicChefDirectory = () => {
 const imageStorage = multer.diskStorage({
   destination: function (req, file, cb) {
     try {
-      ensurePublicChefDirectory(); // Ensure public/image/chef directory exists
-      cb(null, publicChefDirectory); // Save to public/image/chef/
+      const chefIdentifier = getChefIdentifier(req);
+      const chefDirectory = path.join(publicChefDirectory, chefIdentifier);
+      ensureDirectoryExists(chefDirectory);
+      cb(null, chefDirectory);
     } catch (error) {
       cb(error);
     }
   },
   filename: function (req, file, cb) {
-    // Assuming req.user is populated by the protect middleware
-    const userName = req.user?.name ? req.user.name.replace(/\s+/g, '_').toLowerCase() : 'unknown_chef';
-    const fileExtension = path.extname(file.originalname);
-    cb(null, `${userName}_profile${fileExtension}`);
+    const safeName = sanitizeFileNameFragment(req.user?.name);
+    const timestamp = formatTimestampForFilename();
+    const fileExtension = path.extname(file.originalname) || '.jpg';
+    cb(null, `${safeName}_profile_${timestamp}${fileExtension}`);
   }
 });
 
@@ -163,6 +233,61 @@ const normaliseMenuPayload = (menu = {}) => {
   };
 };
 
+const buildPublicChefResponse = (chef) => {
+  if (!chef) {
+    return null;
+  }
+
+  const plainChef = typeof chef.toJSON === 'function' ? chef.toJSON() : chef;
+
+  const publicChef = {
+    id: plainChef.id || plainChef._id?.toString() || null,
+    user: plainChef.user || null,
+    profilePicture: plainChef.profilePicture || '/chef-images/default-profile.png',
+    specialty: plainChef.specialty || '',
+    experience: plainChef.experience ?? 0,
+    hourlyRate: plainChef.hourlyRate ?? 0,
+    description: plainChef.description || '',
+    cuisineTypes: Array.isArray(plainChef.cuisineTypes) ? plainChef.cuisineTypes : [],
+    serviceTypes: Array.isArray(plainChef.serviceTypes) ? plainChef.serviceTypes : [],
+    serviceAreas: Array.isArray(plainChef.serviceAreas) ? plainChef.serviceAreas : [],
+    rating: plainChef.rating || { average: 0, count: 0 },
+    portfolio: {
+      images: plainChef.portfolio?.images || [],
+      videos: plainChef.portfolio?.videos || [],
+      description: plainChef.portfolio?.description || '',
+      menus: Array.isArray(plainChef.portfolio?.menus)
+        ? plainChef.portfolio.menus
+            .filter(menu => menu && (menu.isActive ?? true))
+            .map((menu) => {
+              const plainMenu = typeof menu.toJSON === 'function' ? menu.toJSON() : menu;
+              return {
+                id: plainMenu.id || plainMenu._id?.toString() || null,
+                name: plainMenu.name || '',
+                description: plainMenu.description || '',
+                price: plainMenu.price ?? 0,
+                type: plainMenu.type || 'forfait',
+                category: plainMenu.category || 'Gastronomique',
+                courses: Array.isArray(plainMenu.courses) ? plainMenu.courses : [],
+                ingredients: Array.isArray(plainMenu.ingredients) ? plainMenu.ingredients : [],
+                allergens: Array.isArray(plainMenu.allergens) ? plainMenu.allergens : [],
+                dietaryOptions: Array.isArray(plainMenu.dietaryOptions) ? plainMenu.dietaryOptions : [],
+                duration: plainMenu.duration || '',
+                minGuests: plainMenu.minGuests ?? 1,
+                maxGuests: plainMenu.maxGuests ?? plainMenu.minGuests ?? 1,
+                image: plainMenu.image || null,
+                isActive: plainMenu.isActive ?? true,
+                createdAt: plainMenu.createdAt || null,
+                updatedAt: plainMenu.updatedAt || null
+              };
+            })
+        : []
+    }
+  };
+
+  return publicChef;
+};
+
 // @desc    Get all chefs with filtering and pagination
 // @route   GET /api/chefs
 // @access  Public
@@ -215,14 +340,42 @@ router.get('/', async (req, res) => {
     const sortOptions = {};
     sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
 
-    const chefs = await Chef.find(query)
+    const chefsFromDb = await Chef.find(query)
       .populate('user', 'name email avatar')
       .select('-documents -bankDetails')
       .sort(sortOptions)
       .limit(limit * 1)
       .skip((page - 1) * limit);
+    console.log('[Backend] Chefs from DB (before deduplication):', chefsFromDb);
 
-    const total = await Chef.countDocuments(query);
+    const seenUserIds = new Set();
+    const uniqueChefs = [];
+
+    for (const chefDoc of chefsFromDb) {
+      const populatedUser = chefDoc?.user;
+      const userId =
+        populatedUser?._id?.toString?.() ??
+        (typeof populatedUser === 'string' || typeof populatedUser === 'number'
+          ? String(populatedUser)
+          : populatedUser?.toString?.());
+
+      if (!userId || seenUserIds.has(userId)) {
+        if (!userId) {
+          console.warn('[Backend] Chef record without resolvable user id, keeping for inspection:', chefDoc?._id);
+          uniqueChefs.push(chefDoc);
+        }
+        continue;
+      }
+
+      seenUserIds.add(userId);
+      uniqueChefs.push(chefDoc);
+    }
+    console.log('[Backend] Unique chefs (after deduplication):', uniqueChefs);
+
+    const chefs = uniqueChefs.map(buildPublicChefResponse);
+
+    const totalUniqueChefUsers = await Chef.distinct('user', query);
+    const total = totalUniqueChefUsers.length;
 
     res.json({
       success: true,
@@ -455,10 +608,26 @@ router.post('/me/profile-picture', protect, authorize('chef'), imageUpload.singl
       });
     }
 
-    const imageUrl = `/chef-profile-images/${req.file.filename}`;
+    const chefIdentifier = getChefIdentifier(req);
+    const imageUrl = `/chef-images/${chefIdentifier}/${req.file.filename}`.replace(/\\/g, '/');
+
+    const previousImage = chef.profilePicture;
+    if (previousImage && previousImage !== imageUrl) {
+      await removeExistingProfileImage(previousImage);
+    }
 
     chef.profilePicture = imageUrl;
     await chef.save();
+
+    const user = await User.findById(req.user.id);
+    if (user) {
+      const previousAvatar = user.avatar;
+      if (previousAvatar && previousAvatar !== imageUrl && previousAvatar !== previousImage) {
+        await removeExistingProfileImage(previousAvatar);
+      }
+      user.avatar = imageUrl;
+      await user.save();
+    }
 
     res.json({
       success: true,
@@ -848,7 +1017,8 @@ router.post('/me/menus/:menuId/image', protect, authorize('chef'), imageUpload.s
       });
     }
 
-    const imageUrl = `/chef-profile-images/${req.file.filename}`;
+    const chefIdentifier = getChefIdentifier(req);
+    const imageUrl = `/chef-images/${chefIdentifier}/${req.file.filename}`.replace(/\\/g, '/');
 
     menu.image = imageUrl;
     menu.updatedAt = new Date();
@@ -872,11 +1042,11 @@ router.post('/me/menus/:menuId/image', protect, authorize('chef'), imageUpload.s
 // @desc    Get chef's bookings/missions
 // @route   GET /api/chefs/me/bookings
 // @access  Private (Chef)
-router.get('/me/bookings', protect, authorize('chef'), async (req, res) => {
+router.get('/:id/bookings', protect, canAccessChefData, async (req, res) => {
   try {
     const { status, page = 1, limit = 10 } = req.query;
     
-    const chef = await Chef.findOne({ user: req.user.id });
+    const chef = await Chef.findOne({ user: req.params.id });
     if (!chef) {
       return res.status(404).json({
         success: false,
@@ -1062,14 +1232,110 @@ router.get('/me/earnings', protect, authorize('chef'), async (req, res) => {
   }
 });
 
+// @desc    Get public chef menus
+// @route   GET /api/chefs/:chefId/menus
+// @access  Public
+router.get('/:chefId/menus', async (req, res) => {
+  try {
+    const { chefId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(chefId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Identifiant de chef invalide.'
+      });
+    }
+
+    const chef = await Chef.findOne({
+      _id: chefId,
+      'verification.status': 'approved',
+      isActive: true
+    }).populate('user', 'name email avatar');
+
+    if (!chef) {
+      return res.status(404).json({
+        success: false,
+        message: 'Chef introuvable ou inactif.'
+      });
+    }
+
+    const publicChef = buildPublicChefResponse(chef);
+    const { portfolio, ...restChef } = publicChef;
+    const menus = Array.isArray(portfolio?.menus) ? portfolio.menus : [];
+
+    res.json({
+      success: true,
+      chef: {
+        ...restChef,
+        portfolio: {
+          images: portfolio?.images || [],
+          videos: portfolio?.videos || [],
+          description: portfolio?.description || ''
+        }
+      },
+      menus
+    });
+
+  } catch (error) {
+    console.error('Get public chef menus error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération des menus du chef.'
+    });
+  }
+});
+
+// @desc    Get public chef profile
+// @route   GET /api/chefs/:chefId
+// @access  Public
+router.get('/:chefId', async (req, res) => {
+  try {
+    const { chefId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(chefId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Identifiant de chef invalide.'
+      });
+    }
+
+    const chef = await Chef.findOne({
+      _id: chefId,
+      'verification.status': 'approved',
+      isActive: true
+    }).populate('user', 'name email avatar');
+
+    if (!chef) {
+      return res.status(404).json({
+        success: false,
+        message: 'Chef introuvable ou inactif.'
+      });
+    }
+
+    const publicChef = buildPublicChefResponse(chef);
+
+    res.json({
+      success: true,
+      chef: publicChef
+    });
+
+  } catch (error) {
+    console.error('Get public chef profile error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération du profil du chef.'
+    });
+  }
+});
+
 // @desc    Get chef statistics
-// @route   GET /api/chefs/me/statistics
-// @access  Private (Chef)
-router.get('/me/statistics', protect, authorize('chef'), async (req, res) => {
+// @route   GET /api/chefs/:id/dashboard/stats
+// @access  Private (Chef or Admin)
+router.get('/:id/dashboard/stats', protect, canAccessChefData, async (req, res) => {
   try {
     const { period = '30d' } = req.query;
     
-    const chef = await Chef.findOne({ user: req.user.id });
+    const chef = await Chef.findOne({ user: req.params.id });
     if (!chef) {
       return res.status(404).json({
         success: false,

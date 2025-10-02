@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { User, Upload, Save, MapPin, Award, Camera, FileText, Shield, Phone, Mail, Globe, Plus, X, Check } from 'lucide-react';
+import React, { useState } from 'react';
+import { User, Upload, Save, MapPin, Award, Camera, FileText, Shield, Phone, Mail, Plus, Check, ChefHat } from 'lucide-react';
 
 const ChefProfile: React.FC = () => {
   const [loading, setLoading] = useState(false);
@@ -69,23 +69,27 @@ const ChefProfile: React.FC = () => {
     'Paléo', 'Cétogène', 'Diabétique'
   ];
 
-  const handleInputChange = (field: string, value: any) => {
+  const handleInputChange = <K extends keyof typeof profileData>(field: K, value: typeof profileData[K]) => {
     setProfileData(prev => ({
       ...prev,
       [field]: value
     }));
   };
 
-  const handleArrayToggle = (field: string, value: string) => {
-    setProfileData(prev => ({
-      ...prev,
-      [field]: prev[field].includes(value)
-        ? prev[field].filter(item => item !== value)
-        : [...prev[field], value]
-    }));
+  const handleArrayToggle = (field: 'cuisineTypes' | 'serviceTypes' | 'dietarySpecializations', value: string) => {
+    setProfileData(prev => {
+      const current = prev[field] as string[];
+      const updated = current.includes(value)
+        ? current.filter(item => item !== value)
+        : [...current, value];
+      return {
+        ...prev,
+        [field]: updated
+      };
+    });
   };
 
-  const handleFileUpload = async (documentType: string, file: File) => {
+  const handleFileUpload = async (documentType: keyof typeof profileData.documents) => {
     setLoading(true);
     try {
       // Simulate file upload
@@ -103,7 +107,7 @@ const ChefProfile: React.FC = () => {
         }));
         setLoading(false);
       }, 2000);
-    } catch (error) {
+    } catch {
       setLoading(false);
     }
   };
@@ -117,7 +121,7 @@ const ChefProfile: React.FC = () => {
         console.log('Profile updated:', profileData);
         setLoading(false);
       }, 1000);
-    } catch (error) {
+    } catch {
       setLoading(false);
     }
   };

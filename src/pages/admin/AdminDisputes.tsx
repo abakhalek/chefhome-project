@@ -5,7 +5,7 @@ import { DisputeManagement } from '../../components/admin/DisputeManagement';
 const AdminDisputes: React.FC = () => {
   const [disputes, setDisputes] = useState<AdminBooking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+
 
   const fetchDisputes = async () => {
     setLoading(true);
@@ -14,8 +14,7 @@ const AdminDisputes: React.FC = () => {
       const { disputes: fetchedDisputes } = await adminService.getDisputes();
       setDisputes(fetchedDisputes);
     } catch (err) {
-      setError('Failed to fetch disputes');
-      console.error(err);
+      console.error('Failed to fetch disputes:', err);
     } finally {
       setLoading(false);
     }

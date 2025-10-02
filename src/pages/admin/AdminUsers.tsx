@@ -14,7 +14,7 @@ import {
   CheckCircle2,
   XCircle
 } from 'lucide-react';
-import { adminService, AdminUser } from '../../services/adminService';
+import { adminService, AdminUser, PaginationData } from '../../services/adminService';
 
 
 interface FeedbackState {
@@ -93,11 +93,34 @@ const roleColor = (role: string) => {
   }
 };
 
+const getErrorMessage = (unknownError: unknown, fallback: string): string => {
+  const apiError = unknownError as {
+    response?: {
+      data?: {
+        message?: string;
+        errors?: Array<{ msg?: string }>;
+      };
+    };
+  };
+
+  if (apiError?.response?.data?.message) {
+    return apiError.response.data.message;
+  }
+  const validationMessage = apiError?.response?.data?.errors?.find((err) => err.msg)?.msg;
+  if (validationMessage) {
+    return validationMessage;
+  }
+  if (unknownError instanceof Error && unknownError.message) {
+    return unknownError.message;
+  }
+  return fallback;
+};
+
 const AdminUsers: React.FC = () => {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0, limit: pageSize });
+  const [pagination, setPagination] = useState<PaginationData>({ page: 1, pages: 1, total: 0, limit: pageSize });
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -154,8 +177,7 @@ const AdminUsers: React.FC = () => {
         }
       } catch (err) {
         if (!isCancelled) {
-          const message = (err as any)?.response?.data?.message || 'Impossible de charger les utilisateurs.';
-          setError(message);
+          setError(getErrorMessage(err, 'Impossible de charger les utilisateurs.'));
         }
       } finally {
         if (!isCancelled) {
@@ -234,8 +256,7 @@ const AdminUsers: React.FC = () => {
       const detailedUser = await adminService.getUser(user.id);
       setSelectedUser(detailedUser);
     } catch (err) {
-      const message = (err as any)?.response?.data?.message || 'Impossible de charger les détails de l\'utilisateur.';
-      setFeedback({ type: 'error', message });
+      setFeedback({ type: 'error', message: getErrorMessage(err, "Impossible de charger les détails de l'utilisateur.") });
     } finally {
       setDetailsLoading(false);
     }
@@ -279,7 +300,7 @@ const AdminUsers: React.FC = () => {
     setFormSubmitting(true);
     setFormError(null);
 
-    const payload: any = {
+    const basePayload = {
       name: formData.name.trim(),
       email: formData.email.trim(),
       phone: formData.phone.trim(),
@@ -288,8 +309,13 @@ const AdminUsers: React.FC = () => {
       isVerified: formData.isVerified
     };
 
+    const createPayload: Parameters<typeof adminService.createUser>[0] = {
+      ...basePayload,
+      password: formData.password
+    };
+
     if (formData.role === 'b2b') {
-      payload.company = {
+      createPayload.company = {
         name: formData.companyName || undefined,
         siret: formData.companySiret || undefined,
         address: formData.companyAddress || undefined,
@@ -297,28 +323,43 @@ const AdminUsers: React.FC = () => {
       };
     }
 
-    if (formMode === 'create' || formData.password) {
-      payload.password = formData.password;
-    }
-
     try {
       if (formMode === 'create') {
-        await adminService.createUser(payload);
+        if (!formData.password) {
+          setFormError('Le mot de passe est requis pour créer un utilisateur.');
+          setFormSubmitting(false);
+          return;
+        }
+        await adminService.createUser(createPayload);
         setFeedback({ type: 'success', message: 'Utilisateur créé avec succès.' });
         setCurrentPage(1);
         refreshUsers();
       } else if (formUserId) {
-        const updated = await adminService.updateUser(formUserId, payload);
+        const updatePayload: Parameters<typeof adminService.updateUser>[1] = {
+          ...basePayload,
+          ...(formData.role === 'b2b'
+            ? {
+                company: {
+                  name: formData.companyName || undefined,
+                  siret: formData.companySiret || undefined,
+                  address: formData.companyAddress || undefined,
+                  contactPerson: formData.companyContact || undefined
+                }
+              }
+            : { company: undefined })
+        };
+
+        if (formData.password) {
+          updatePayload.password = formData.password;
+        }
+
+        const updated = await adminService.updateUser(formUserId, updatePayload);
         applyUserUpdate(updated);
         setFeedback({ type: 'success', message: 'Utilisateur mis à jour avec succès.' });
       }
       closeModals();
     } catch (err) {
-      const message =
-        (err as any)?.response?.data?.message ||
-        (err as any)?.response?.data?.errors?.[0]?.msg ||
-        'Impossible d\'enregistrer les modifications.';
-      setFormError(message);
+      setFormError(getErrorMessage(err, "Impossible d'enregistrer les modifications."));
     } finally {
       setFormSubmitting(false);
     }
@@ -337,8 +378,7 @@ const AdminUsers: React.FC = () => {
       window.URL.revokeObjectURL(url);
       setFeedback({ type: 'success', message: 'Export des utilisateurs démarré.' });
     } catch (err) {
-      const message = (err as any)?.response?.data?.message || 'Échec de l\'export des utilisateurs.';
-      setFeedback({ type: 'error', message });
+      setFeedback({ type: 'error', message: getErrorMessage(err, "Échec de l'export des utilisateurs.") });
     }
   };
 
@@ -353,8 +393,7 @@ const AdminUsers: React.FC = () => {
         message: !user.isVerified ? 'Profil vérifié avec succès.' : 'Vérification retirée.'
       });
     } catch (err) {
-      const message = (err as any)?.response?.data?.message || 'Impossible de modifier la vérification.';
-      setFeedback({ type: 'error', message });
+      setFeedback({ type: 'error', message: getErrorMessage(err, 'Impossible de modifier la vérification.') });
     } finally {
       setVerificationLoading(false);
     }
@@ -384,8 +423,7 @@ const AdminUsers: React.FC = () => {
       }
       setConfirmDialog(null);
     } catch (err) {
-      const message = (err as any)?.response?.data?.message || 'Action impossible à réaliser.';
-      setFeedback({ type: 'error', message });
+      setFeedback({ type: 'error', message: getErrorMessage(err, 'Action impossible à réaliser.') });
     } finally {
       setConfirmSubmitting(false);
     }
@@ -410,8 +448,7 @@ const AdminUsers: React.FC = () => {
       setFeedback({ type: 'success', message: 'Message envoyé avec succès.' });
       closeModals();
     } catch (err) {
-      const message = (err as any)?.response?.data?.message || 'Impossible d\'envoyer le message.';
-      setMessageError(message);
+      setMessageError(getErrorMessage(err, "Impossible d'envoyer le message."));
     } finally {
       setMessageSubmitting(false);
     }

@@ -1,28 +1,7 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { useState, ReactNode } from 'react';
+import { NotificationContext, NotificationContextType, Notification } from './NotificationContextShared';
 
-interface Notification {
-  id: string;
-  type: 'success' | 'error' | 'warning' | 'info';
-  title: string;
-  message: string;
-  duration?: number;
-}
-
-interface NotificationContextType {
-  notifications: Notification[];
-  addNotification: (notification: Omit<Notification, 'id'>) => void;
-  removeNotification: (id: string) => void;
-}
-
-const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
-
-export const useNotification = () => {
-  const context = useContext(NotificationContext);
-  if (context === undefined) {
-    throw new Error('useNotification must be used within a NotificationProvider');
-  }
-  return context;
-};
+export type { NotificationContextType, Notification };
 
 interface NotificationProviderProps {
   children: ReactNode;

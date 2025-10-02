@@ -70,6 +70,17 @@ export const authorize = (...roles) => {
   };
 };
 
+// Check if user can access chef data (is owner or admin)
+export const canAccessChefData = (req, res, next) => {
+  if (req.user.role === 'admin' || req.user.id === req.params.id) {
+    return next();
+  }
+  return res.status(403).json({
+    success: false,
+    message: 'Not authorized to access this resource'
+  });
+};
+
 // Check if user owns resource or is admin
 export const ownerOrAdmin = (resourceField = 'user') => {
   return (req, res, next) => {

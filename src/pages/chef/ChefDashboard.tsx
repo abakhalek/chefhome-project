@@ -1,24 +1,40 @@
 
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { chefService, Mission } from '../../services/chefService';
+import { chefService } from '../../services/chefService';
+import { Booking } from '../../types';
 import { Calendar, Euro, Star, TrendingUp, Plus, User, FileText } from 'lucide-react';
+import { useAuth } from '../../hooks/useAuth';
+
+interface ChefDashboardStats {
+  chefStats?: {
+    monthlyBookings?: number;
+    monthlyRevenue?: number;
+    averageRating?: number;
+  };
+  performanceMetrics?: {
+    acceptedRequests?: number;
+    totalRequests?: number;
+  };
+}
 
 const ChefDashboard: React.FC = () => {
-  const [stats, setStats] = useState<any>(null);
-  const [missions, setMissions] = useState<Mission[]>([]);
+  const { user } = useAuth();
+  const [stats, setStats] = useState<ChefDashboardStats | null>(null);
+  const [missions, setMissions] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!user?.id) return;
       setLoading(true);
       try {
         const [statsData, missionsData] = await Promise.all([
-          chefService.getStatistics(),
-          chefService.getMissions({ limit: 3, status: 'confirmed' })
+          chefService.getChefDashboardStats(user.id),
+          chefService.getChefBookings(user.id, { limit: 3, status: 'confirmed' })
         ]);
-        setStats(statsData);
-        setMissions(missionsData.missions || []);
+        setStats(statsData.statistics);
+        setMissions(missionsData.bookings || []);
       } catch (error) {
         console.error("Failed to fetch chef dashboard data:", error);
       } finally {
@@ -26,7 +42,7 @@ const ChefDashboard: React.FC = () => {
       }
     };
     fetchData();
-  }, []);
+  }, [user?.id]);
 
   if (loading) {
     return <div className="p-6 text-center">Loading...</div>;

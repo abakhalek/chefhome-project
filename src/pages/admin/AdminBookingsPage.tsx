@@ -150,6 +150,46 @@ const BookingDetailModal: React.FC<{ booking: AdminBooking; onClose: () => void 
             </div>
           </div>
 
+          <div className="border border-gray-100 rounded-xl p-4 space-y-3">
+            <h3 className="text-sm font-semibold text-gray-700 uppercase">Menu & contraintes alimentaires</h3>
+            <div className="space-y-2 text-sm text-gray-600">
+              {booking.menu.type === 'custom' || !booking.menu.name ? (
+                <p>Tarification personnalisée basée sur le taux horaire du chef.</p>
+              ) : (
+                <>
+                  <p className="text-gray-800 font-semibold">{booking.menu.name}</p>
+                  <p>
+                    Type : {booking.menu.type === 'horaire' ? 'Tarif horaire' : 'Forfait chef'}
+                    {typeof booking.menu.price === 'number' && (
+                      <span className="ml-2">· {booking.menu.price.toFixed(2)}€{booking.menu.type === 'horaire' ? '/h' : ''}</span>
+                    )}
+                  </p>
+                  {(booking.menu.minGuests || booking.menu.maxGuests) && (
+                    <p>Convives : {booking.menu.minGuests || 1}{booking.menu.maxGuests ? ` à ${booking.menu.maxGuests}` : '+'}</p>
+                  )}
+                </>
+              )}
+
+              {booking.menu.customRequests && (
+                <p>
+                  <span className="font-semibold text-gray-700">Demandes spécifiques :</span> {booking.menu.customRequests}
+                </p>
+              )}
+
+              {booking.menu.dietaryRestrictions.length > 0 && (
+                <p>
+                  <span className="font-semibold text-gray-700">Régimes :</span> {booking.menu.dietaryRestrictions.join(', ')}
+                </p>
+              )}
+
+              {booking.menu.allergies.length > 0 && (
+                <p>
+                  <span className="font-semibold text-gray-700">Allergies :</span> {booking.menu.allergies.join(', ')}
+                </p>
+              )}
+            </div>
+          </div>
+
           <div className="border border-gray-100 rounded-xl p-4">
             <h3 className="text-sm font-semibold text-gray-700 uppercase mb-3">Historique</h3>
             <div className="space-y-2">
@@ -193,7 +233,10 @@ const AdminBookingsPage: React.FC = () => {
     setError(null);
     try {
       const response = await adminService.getBookings({ page, limit: 10 });
-      setBookings(response.bookings);
+      const uniqueBookings = response.bookings.filter((booking, index, self) =>
+        index === self.findIndex((b) => b.id === booking.id)
+      );
+      setBookings(uniqueBookings);
       setPagination(response.pagination);
     } catch (err) {
       console.error('Failed to fetch bookings:', err);
@@ -322,6 +365,9 @@ const AdminBookingsPage: React.FC = () => {
                       <span>{booking.eventDetails.duration}h</span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">{booking.serviceType}</p>
+                    {booking.menu?.name && (
+                      <p className="text-xs text-gray-500">Menu : {booking.menu.name}</p>
+                    )}
                   </td>
                   <td className="px-6 py-4 text-right text-sm font-semibold text-gray-900">
                     {booking.pricing.totalAmount.toFixed(2)}€

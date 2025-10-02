@@ -71,7 +71,10 @@ const AdminChefsPage: React.FC = () => {
     setError(null);
     try {
       const chefs = await adminService.getPendingChefs();
-      setPendingChefs(chefs);
+      const uniqueChefs = chefs.filter((chef, index, self) =>
+        index === self.findIndex((c) => c.email === chef.email)
+      );
+      setPendingChefs(uniqueChefs);
     } catch (err) {
       console.error('Failed to fetch pending chefs:', err);
       setError("Impossible de récupérer les candidatures en attente.");

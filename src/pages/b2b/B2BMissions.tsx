@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { b2bService, B2BMission } from '../../services/b2bService';
+import React, { useState, useEffect, useCallback } from 'react';
+import { b2bService, B2BMission, PaginationData } from '../../services/b2bService';
 import { Eye, CheckCircle, XCircle, Calendar, Euro, Users } from 'lucide-react';
 
 const B2BMissions: React.FC = () => {
   const [missions, setMissions] = useState<B2BMission[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('');
-  const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, pages: 1 });
+  const [pagination, setPagination] = useState<PaginationData>({ page: 1, limit: 10, total: 0, pages: 1 });
 
-  const fetchMissions = async (page = 1) => {
+  const fetchMissions = useCallback(async (page = 1) => {
     setLoading(true);
     try {
       const { missions, pagination } = await b2bService.getMissions({ status: filterStatus || undefined, page, limit: 10 });
@@ -19,11 +19,11 @@ const B2BMissions: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterStatus]);
 
   useEffect(() => {
     fetchMissions(1);
-  }, [filterStatus]);
+  }, [fetchMissions]);
 
   const handlePageChange = (newPage: number) => {
     fetchMissions(newPage);

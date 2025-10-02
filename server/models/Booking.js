@@ -40,6 +40,15 @@ const bookingSchema = new mongoose.Schema({
   },
   menu: {
     selectedMenu: { type: mongoose.Schema.Types.ObjectId },
+    name: { type: String },
+    type: {
+      type: String,
+      enum: ['forfait', 'horaire', 'custom'],
+      default: 'custom'
+    },
+    price: { type: Number },
+    minGuests: { type: Number },
+    maxGuests: { type: Number },
     customRequests: String,
     dietaryRestrictions: [String],
     allergies: [String]
@@ -138,7 +147,7 @@ bookingSchema.methods.calculateTotal = function() {
   const totalAmount = this.pricing.basePrice + this.pricing.serviceFee + this.pricing.taxes - this.pricing.discount;
   this.pricing.totalAmount = totalAmount;
 
-  const depositAmount = Math.round(totalAmount * 0.3); // 30% deposit by default
+  const depositAmount = Math.round(totalAmount * 0.2 * 100) / 100; // 20% deposit per business rules
   this.pricing.depositAmount = depositAmount;
   this.pricing.remainingBalance = Math.max(totalAmount - depositAmount, 0);
 

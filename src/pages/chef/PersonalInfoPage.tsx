@@ -1,9 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { chefService, ChefProfile } from '../../services/chefService';
-import { Upload, FileText, CheckCircle, XCircle, Plus, Edit, Trash2, MapPin, Download } from 'lucide-react';
+import { Upload, CheckCircle, XCircle, Plus, Edit, Trash2, Download } from 'lucide-react';
+import { useAuth } from '../../hooks/useAuth';
 
 const PersonalInfoPage: React.FC = () => {
+  const { user } = useAuth();
   const [profile, setProfile] = useState<Partial<ChefProfile> | null>(null);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -29,19 +31,23 @@ const PersonalInfoPage: React.FC = () => {
 
   useEffect(() => {
     const fetchProfile = async () => {
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
       try {
-        const fetchedProfile = await chefService.getProfile();
-        setProfile(fetchedProfile);
-        console.log('Frontend - Fetched Chef Profile:', fetchedProfile); // Added log
-        console.log('Frontend - Profile Picture URL:', fetchedProfile.profilePicture); // Added log
+        const profileData = await chefService.getProfile();
+        setProfile(profileData);
       } catch (error) {
-        console.error("Failed to fetch chef profile:", error);
+        console.error('Failed to fetch chef profile:', error);
       } finally {
         setLoading(false);
       }
     };
+
     fetchProfile();
-  }, []);
+  }, [user?.id]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -97,7 +103,10 @@ const PersonalInfoPage: React.FC = () => {
     setIsUploadingProfilePicture(true);
     try {
       const response = await chefService.uploadProfilePicture(profilePictureFile);
-      setProfile(prev => ({ ...prev, profilePicture: response.profilePicture }));
+      setProfile(prev => {
+        if (!prev) return prev;
+        return { ...prev, profilePicture: response.profilePicture ?? prev.profilePicture };
+      });
       setProfilePictureFile(null);
       alert("Photo de profil téléchargée avec succès !");
     } catch (error) {

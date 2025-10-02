@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient';
+import { Booking } from '../types';
 
 export type BookingServiceType = 'home-dining' | 'private-events' | 'cooking-classes' | 'catering';
 
@@ -35,12 +36,32 @@ export interface BookingQuote {
   totalAmount: number;
   depositAmount: number;
   remainingBalance: number;
+  menu?: null | {
+    id: string;
+    name: string;
+    type: 'forfait' | 'horaire';
+    unitPrice: number;
+  };
+  calculation?: {
+    method: 'menu' | 'hourly';
+    menu?: {
+      id: string;
+      name: string;
+      type: 'forfait' | 'horaire';
+      unitPrice: number;
+      durationHours: number;
+      guests: number;
+    };
+    hourlyRate?: number;
+    durationHours?: number;
+    guests?: number;
+  };
 }
 
 export interface CreateBookingResponse {
   success: boolean;
   message: string;
-  booking: any;
+  booking: Booking;
   quote: BookingQuote;
 }
 

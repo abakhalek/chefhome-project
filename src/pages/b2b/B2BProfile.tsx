@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { b2bService, B2BProfileData } from '../../services/b2bService';
-import { Briefcase, User, Mail, Phone, MapPin } from 'lucide-react';
 
 const B2BProfile: React.FC = () => {
   const [profile, setProfile] = useState<B2BProfileData | null>(null);

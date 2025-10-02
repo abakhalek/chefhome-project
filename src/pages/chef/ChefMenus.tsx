@@ -1,35 +1,39 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { chefService, ChefMenu } from '../../services/chefService';
+import { chefService } from '../../services/chefService';
+import { Menu } from '../../types';
+import { useAuth } from '../../hooks/useAuth';
 import { Plus, Edit, Trash2, Camera } from 'lucide-react';
 import { API_CONFIG } from '../../utils/constants';
 
 const ChefMenus: React.FC = () => {
-  const [menus, setMenus] = useState<ChefMenu[]>([]);
+  const { user } = useAuth();
+  const [menus, setMenus] = useState<Menu[]>([]);
   const [loading, setLoading] = useState(true);
 
   const serverBaseUrl = API_CONFIG.BASE_URL.replace('/api', '');
 
-  const fetchMenus = async () => {
+  const fetchMenus = useCallback(async () => {
+    if (!user?.chefId) return;
     setLoading(true);
     try {
-      const fetchedMenus = await chefService.getMenus();
-      setMenus(fetchedMenus);
-    } catch (error) {
+      const response = await chefService.getChefMenus(user.chefId);
+      setMenus(response.menus || []);
+    } catch (error) { 
       console.error("Failed to fetch menus:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.chefId]);
 
   useEffect(() => {
     fetchMenus();
-  }, []);
+  }, [fetchMenus]);
 
   const handleDelete = async (menuId: string) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer cette offre ?')) return;
+    if (!user?.chefId || !confirm('Êtes-vous sûr de vouloir supprimer cette offre ?')) return;
     try {
-      await chefService.deleteMenu(menuId);
+      await chefService.deleteChefMenu(user.chefId, menuId);
       fetchMenus(); // Refresh menus list
     } catch (error) {
       console.error('Error deleting menu:', error);
@@ -59,7 +63,7 @@ const ChefMenus: React.FC = () => {
       {/* Menus Grid */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {menus.map((menu) => (
-          <div key={menu._id} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
+          <div key={menu.id} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
             <div className="relative h-48 bg-gray-200">
               {menu.image ? (
                 <img src={`${serverBaseUrl}${menu.image}`} alt={menu.name} className="w-full h-full object-cover" />
@@ -96,7 +100,7 @@ const ChefMenus: React.FC = () => {
                   <Edit className="h-4 w-4" />
                   <span>Modifier</span>
                 </button>
-                <button onClick={() => handleDelete(menu._id)} className="bg-red-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-red-600 transition-colors">
+                <button onClick={() => handleDelete(menu.id)} className="bg-red-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-red-600 transition-colors">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>

@@ -1,5 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { adminService, AdminStats, PendingChef, Dispute, AdminUser } from '../services/adminService';
+
+const getErrorMessage = (unknownError: unknown) => {
+  if (unknownError instanceof Error) {
+    return unknownError.message;
+  }
+  return 'Une erreur inattendue est survenue.';
+};
 
 export const useAdmin = () => {
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -9,18 +16,21 @@ export const useAdmin = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  type GetUsersParams = Parameters<typeof adminService.getUsers>[0];
+  type GetDisputesParams = Parameters<typeof adminService.getDisputes>[0];
+
   // Dashboard & Analytics
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     try {
       setLoading(true);
       const statsData = await adminService.getStats();
       setStats(statsData);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      setError(getErrorMessage(unknownError));
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const exportData = async (type: string, format: 'csv' | 'pdf') => {
     try {
@@ -33,39 +43,39 @@ export const useAdmin = () => {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      setError(getErrorMessage(unknownError));
     }
   };
 
   // Chef Management
-  const loadPendingChefs = async () => {
+  const loadPendingChefs = useCallback(async () => {
     try {
       const chefsData = await adminService.getPendingChefs();
       setPendingChefs(chefsData);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      setError(getErrorMessage(unknownError));
     }
-  };
+  }, []);
 
   const verifyChef = async (chefId: string, status: 'approved' | 'rejected', reason?: string) => {
     try {
       await adminService.verifyChef(chefId, status, reason);
       setPendingChefs(prev => prev.filter(chef => chef.id !== chefId));
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      setError(getErrorMessage(unknownError));
     }
   };
 
   // User Management
-  const loadUsers = async (params?: any) => {
+  const loadUsers = useCallback(async (params?: GetUsersParams) => {
     try {
       const { users: usersData } = await adminService.getUsers(params);
       setUsers(usersData);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      setError(getErrorMessage(unknownError));
     }
-  };
+  }, []);
 
   const updateUserStatus = async (userId: string, status: 'active' | 'suspended', reason?: string) => {
     try {
@@ -73,28 +83,28 @@ export const useAdmin = () => {
       setUsers(prev => prev.map(user => 
         user.id === userId ? { ...user, status } : user
       ));
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      setError(getErrorMessage(unknownError));
     }
   };
 
   const sendMessageToUser = async (userId: string, subject: string, message: string) => {
     try {
       await adminService.sendMessageToUser(userId, subject, message);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      setError(getErrorMessage(unknownError));
     }
   };
 
   // Dispute Management
-  const loadDisputes = async (params?: any) => {
+  const loadDisputes = useCallback(async (params?: GetDisputesParams) => {
     try {
       const { disputes: disputesData } = await adminService.getDisputes(params);
       setDisputes(disputesData);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      setError(getErrorMessage(unknownError));
     }
-  };
+  }, []);
 
   const resolveDispute = async (disputeId: string, resolution: string, refundAmount?: number) => {
     try {
@@ -104,8 +114,8 @@ export const useAdmin = () => {
           ? { ...dispute, status: 'resolved' as const }
           : dispute
       ));
-    } catch (err: any) {
-      setError(err.message);
+    } catch (unknownError) {
+      setError(getErrorMessage(unknownError));
     }
   };
 
@@ -114,7 +124,7 @@ export const useAdmin = () => {
     loadPendingChefs();
     loadDisputes();
     loadUsers();
-  }, []);
+  }, [loadStats, loadPendingChefs, loadDisputes, loadUsers]);
 
   return {
     // State

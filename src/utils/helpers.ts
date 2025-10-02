@@ -58,7 +58,7 @@ export const generateId = (): string => {
 };
 
 // Debounce function
-export const debounce = <T extends (...args: any[]) => any>(
+export const debounce = <T extends (...args: unknown[]) => unknown>(
   func: T,
   delay: number = DEFAULTS.SEARCH_DEBOUNCE
 ): (...args: Parameters<T>) => void => {

@@ -6,11 +6,12 @@ const chefSchema = new mongoose.Schema({
   user: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    required: true,
+    unique: true
   },
   profilePicture: { // New field for chef's profile picture
     type: String,
-    default: '/chef-profile-images/default-profile.png' // Local placeholder default
+    default: '/chef-images/default-profile.png' // Local placeholder default
   },
   specialty: {
     type: String,

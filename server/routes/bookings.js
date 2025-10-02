@@ -4,14 +4,13 @@ import { body, validationResult } from 'express-validator';
 import { protect, authorize } from '../middleware/auth.js';
 import Booking from '../models/Booking.js';
 import Chef from '../models/Chef.js';
-import User from '../models/User.js';
 
 const router = express.Router();
 
 // @desc    Create new booking
 // @route   POST /api/bookings
 // @access  Private (Client)
-router.post('/', protect, [
+router.post('/', protect, authorize('client'), [
   body('chefId').isMongoId().withMessage('Valid chef ID is required'),
   body('serviceType').isIn(['home-dining', 'private-events', 'cooking-classes', 'catering']),
   body('eventDetails.date').isISO8601().withMessage('Valid date is required'),
@@ -50,15 +49,15 @@ router.post('/', protect, [
       });
     }
 
-    // Calculate pricing
-    const eventDate = new Date(eventDetails.date);
-    const basePrice = chef.hourlyRate * eventDetails.duration;
-    const serviceFee = Math.round(basePrice * 0.1); // 10% service fee
-    const totalAmount = basePrice + serviceFee;
-    const depositAmount = Math.round(totalAmount * 0.2); // 20% deposit as per business rules
-    const remainingBalance = Math.max(totalAmount - depositAmount, 0);
+    const toCurrency = (value) => {
+      const numericValue = Number(value) || 0;
+      return Math.round(numericValue * 100) / 100;
+    };
 
-    // Create booking
+    const eventDate = new Date(eventDetails.date);
+    const durationHours = Number(eventDetails.duration) || 0;
+    const guestCount = Number(eventDetails.guests) || 0;
+
     const dietaryRestrictions = Array.isArray(menu?.dietaryRestrictions)
       ? menu.dietaryRestrictions.map(item => item?.toString().trim()).filter(Boolean)
       : [];
@@ -72,9 +71,98 @@ router.post('/', protect, [
       allergies
     };
 
-    if (menu?.selectedMenu && mongoose.Types.ObjectId.isValid(menu.selectedMenu)) {
-      bookingMenu.selectedMenu = menu.selectedMenu;
+    let selectedMenuDoc = null;
+    if (menu?.selectedMenu) {
+      if (!mongoose.Types.ObjectId.isValid(menu.selectedMenu)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Selected menu identifier is invalid'
+        });
+      }
+
+      selectedMenuDoc = chef?.portfolio?.menus?.id(menu.selectedMenu) || null;
+
+      if (!selectedMenuDoc) {
+        return res.status(404).json({
+          success: false,
+          message: 'Selected menu was not found for this chef'
+        });
+      }
+
+      if (selectedMenuDoc.isActive === false) {
+        return res.status(400).json({
+          success: false,
+          message: 'Selected menu is currently inactive'
+        });
+      }
+
+      if (typeof selectedMenuDoc.minGuests === 'number' && guestCount < selectedMenuDoc.minGuests) {
+        return res.status(400).json({
+          success: false,
+          message: `Ce menu nécessite un minimum de ${selectedMenuDoc.minGuests} convives.`
+        });
+      }
+
+      if (typeof selectedMenuDoc.maxGuests === 'number' && guestCount > selectedMenuDoc.maxGuests) {
+        return res.status(400).json({
+          success: false,
+          message: `Ce menu accepte au maximum ${selectedMenuDoc.maxGuests} convives.`
+        });
+      }
+
+      bookingMenu.selectedMenu = selectedMenuDoc._id;
+      bookingMenu.name = selectedMenuDoc.name;
+      bookingMenu.type = selectedMenuDoc.type || 'forfait';
+      bookingMenu.price = typeof selectedMenuDoc.price === 'number'
+        ? toCurrency(selectedMenuDoc.price)
+        : undefined;
+      bookingMenu.minGuests = selectedMenuDoc.minGuests;
+      bookingMenu.maxGuests = selectedMenuDoc.maxGuests;
+    } else {
+      bookingMenu.selectedMenu = null; // Explicitly set to null if no menu is selected
+      bookingMenu.type = 'custom';
+      bookingMenu.price = toCurrency(chef.hourlyRate);
+      bookingMenu.name = 'Menu personnalisé';
+      bookingMenu.minGuests = guestCount;
+      bookingMenu.maxGuests = guestCount;
     }
+
+    let basePrice;
+    let calculationDetails;
+
+    if (selectedMenuDoc) {
+      const menuType = selectedMenuDoc.type || 'forfait';
+      if (menuType === 'horaire') {
+        basePrice = toCurrency((selectedMenuDoc.price || 0) * durationHours);
+      } else {
+        basePrice = toCurrency(selectedMenuDoc.price || 0);
+      }
+
+      calculationDetails = {
+        method: 'menu',
+        menu: {
+          id: selectedMenuDoc._id.toString(),
+          name: selectedMenuDoc.name,
+          type: menuType,
+          unitPrice: toCurrency(selectedMenuDoc.price || 0),
+          durationHours,
+          guests: guestCount
+        }
+      };
+    } else {
+      basePrice = toCurrency((chef.hourlyRate || 0) * durationHours);
+      calculationDetails = {
+        method: 'hourly',
+        hourlyRate: toCurrency(chef.hourlyRate || 0),
+        durationHours,
+        guests: guestCount
+      };
+    }
+
+    const serviceFee = toCurrency(basePrice * 0.1);
+    const totalAmount = toCurrency(basePrice + serviceFee);
+    const depositAmount = toCurrency(totalAmount * 0.2);
+    const remainingBalance = toCurrency(Math.max(totalAmount - depositAmount, 0));
 
     const booking = await Booking.create({
       client: req.user.id,
@@ -108,15 +196,39 @@ router.post('/', protect, [
     });
 
     // Populate booking for response
-    await booking.populate('chef client', 'name email phone');
+    await booking.populate([
+      { path: 'client', select: 'name email phone' },
+      { path: 'chef', populate: { path: 'user', select: 'name email phone' } }
+    ]);
 
     // Send notification to chef
     const io = req.app.get('io');
-    io.to(`user-${chef.user._id}`).emit('booking-notification', {
-      type: 'new_booking',
-      bookingId: booking._id,
-      message: `New booking request from ${req.user.name}`
-    });
+    if (chef.user && chef.user._id) {
+      io.to(`user-${chef.user._id}`).emit('booking-notification', {
+        type: 'new_booking',
+        bookingId: booking._id,
+        message: `New booking request from ${req.user.name}`
+      });
+    }
+
+    const bookingData = booking.toJSON();
+    if (bookingData.menu) {
+      const rawSelectedMenu = bookingData.menu.selectedMenu;
+
+      if (rawSelectedMenu instanceof mongoose.Types.ObjectId) {
+        bookingData.menu.selectedMenu = rawSelectedMenu.toHexString();
+      } else if (rawSelectedMenu && typeof rawSelectedMenu === 'object' && '_id' in rawSelectedMenu) {
+        bookingData.menu.selectedMenu = String(rawSelectedMenu._id);
+      } else if (rawSelectedMenu != null) {
+        try {
+          bookingData.menu.selectedMenu = String(rawSelectedMenu);
+        } catch (_conversionError) {
+          bookingData.menu.selectedMenu = null;
+        }
+      } else {
+        bookingData.menu.selectedMenu = null;
+      }
+    }
 
     const quote = {
       reference: `Q-${booking._id.toString().slice(-6).toUpperCase()}`,
@@ -125,18 +237,26 @@ router.post('/', protect, [
       serviceFee,
       totalAmount,
       depositAmount,
-      remainingBalance
+      remainingBalance,
+      menu: calculationDetails.method === 'menu' ? {
+        id: calculationDetails.menu.id,
+        name: calculationDetails.menu.name,
+        type: calculationDetails.menu.type,
+        unitPrice: calculationDetails.menu.unitPrice
+      } : null,
+      calculation: calculationDetails
     };
 
     res.status(201).json({
       success: true,
       message: 'Booking created successfully',
-      booking,
+      booking: bookingData,
       quote
     });
 
   } catch (error) {
     console.error('Booking creation error:', error);
+    console.error('Booking creation error details:', error.message, error.stack);
     res.status(500).json({
       success: false,
       message: 'Error creating booking'
@@ -255,7 +375,11 @@ router.put('/:id/status', protect, async (req, res) => {
     const { status, note } = req.body;
     
     const booking = await Booking.findById(req.params.id)
-      .populate('chef client', 'name email');
+      .populate('client', 'name email')
+      .populate({
+        path: 'chef',
+        populate: { path: 'user', select: 'name email' }
+      });
 
     if (!booking) {
       return res.status(404).json({
@@ -265,7 +389,8 @@ router.put('/:id/status', protect, async (req, res) => {
     }
 
     // Check authorization
-    const isChef = booking.chef.user && booking.chef.user.toString() === req.user.id;
+    const chefUserId = booking.chef?.user?._id || booking.chef?.user;
+    const isChef = chefUserId && chefUserId.toString() === req.user.id;
     const isClient = booking.client._id.toString() === req.user.id;
     const isAdmin = req.user.role === 'admin';
 
@@ -286,17 +411,23 @@ router.put('/:id/status', protect, async (req, res) => {
     });
 
     await booking.save();
+    await booking.populate([
+      { path: 'client', select: 'name email' },
+      { path: 'chef', populate: { path: 'user', select: 'name email' } }
+    ]);
 
     // Send notification
     const io = req.app.get('io');
-    const notificationTarget = isChef ? booking.client._id : booking.chef.user;
-    
-    io.to(`user-${notificationTarget}`).emit('booking-notification', {
-      type: 'status_update',
-      bookingId: booking._id,
-      status,
-      message: `Booking status updated to ${status}`
-    });
+    const notificationTarget = isChef ? booking.client._id : chefUserId;
+
+    if (notificationTarget) {
+      io.to(`user-${notificationTarget}`).emit('booking-notification', {
+        type: 'status_update',
+        bookingId: booking._id,
+        status,
+        message: `Booking status updated to ${status}`
+      });
+    }
 
     res.json({
       success: true,

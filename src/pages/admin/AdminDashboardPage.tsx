@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '../../hooks/useAuth';
 import logo from '../../public/logo.png';
 import { LayoutDashboard, Users, ChefHat, BookCopy, ShieldAlert } from 'lucide-react';
 

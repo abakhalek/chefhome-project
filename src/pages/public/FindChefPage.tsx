@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Star, MapPin, Users, Clock, CheckCircle, XCircle, AlertCircle, CreditCard } from 'lucide-react';
+import { Star, MapPin, CheckCircle, XCircle, AlertCircle, CreditCard } from 'lucide-react';
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import { loadStripe } from '@stripe/stripe-js';
 
 import { chefService } from '../../services/chefService';
 import { bookingService, BookingQuote, BookingServiceType } from '../../services/bookingService';
-import { useAuth } from '../../contexts/AuthContext';
+import { Chef, Menu, Booking } from '../../types';
+import { useAuth } from '../../hooks/useAuth';
 
 const formatCurrency = (amount: number) => `${amount.toFixed(2)}€`;
 
@@ -16,13 +17,22 @@ const splitList = (value: string): string[] =>
     .map(item => item.trim())
     .filter(Boolean);
 
+const getMenuIdentifier = (menu: Menu): string => {
+  if (!menu) {
+    return '';
+  }
+  const candidate = menu as unknown as { id?: string; _id?: string };
+  return candidate.id || candidate._id || '';
+};
+
 const BookingPaymentForm: React.FC<{
   clientSecret: string;
   bookingId: string;
   amount: number;
   onSuccess: () => void;
   onError: (message: string) => void;
-}> = ({ clientSecret, bookingId, amount, onSuccess, onError }) => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+}> = ({ bookingId, amount, onSuccess, onError, clientSecret }) => {
   const stripe = useStripe();
   const elements = useElements();
   const [processing, setProcessing] = useState(false);
@@ -53,8 +63,8 @@ const BookingPaymentForm: React.FC<{
       try {
         await bookingService.confirmDeposit(result.paymentIntent.id, bookingId);
         onSuccess();
-      } catch (confirmError: any) {
-        const message = confirmError?.response?.data?.message || "Erreur lors de la confirmation côté serveur.";
+      } catch (confirmError: unknown) {
+        const message = (confirmError as { response?: { data?: { message?: string } } })?.response?.data?.message || "Erreur lors de la confirmation côté serveur.";
         setError(message);
         onError(message);
       }
@@ -85,10 +95,18 @@ const BookingPaymentForm: React.FC<{
   );
 };
 
+const formatChefName = (name: string | undefined) => {
+  if (!name) return 'Chef Anonyme';
+  const parts = name.split(' ');
+  const firstName = parts[0];
+  const lastName = parts.slice(1).join(' ');
+  return `${firstName} ${lastName}`;
+};
+
 const FindChefPage: React.FC = () => {
   const { isAuthenticated, role } = useAuth();
   const navigate = useNavigate();
-  const [chefs, setChefs] = useState<any[]>([]);
+  const [chefs, setChefs] = useState<Chef[]>([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, pages: 1 });
 
@@ -101,7 +119,7 @@ const FindChefPage: React.FC = () => {
   const [minRating, setMinRating] = useState('');
 
   // Booking states
-  const [selectedChef, setSelectedChef] = useState<any>(null);
+  const [selectedChef, setSelectedChef] = useState<Chef | null>(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [bookingServiceType, setBookingServiceType] = useState<BookingServiceType>('home-dining');
   const [selectedMenuId, setSelectedMenuId] = useState('');
@@ -122,18 +140,35 @@ const FindChefPage: React.FC = () => {
   });
   const [bookingStep, setBookingStep] = useState<'form' | 'quote' | 'payment' | 'success'>('form');
   const [bookingQuote, setBookingQuote] = useState<BookingQuote | null>(null);
-  const [createdBooking, setCreatedBooking] = useState<any | null>(null);
+  const [createdBooking, setCreatedBooking] = useState<Booking | null>(null);
   const [paymentInfo, setPaymentInfo] = useState<{ clientSecret: string; paymentIntentId: string; amount: number; mock?: boolean } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [paymentMessage, setPaymentMessage] = useState<string | null>(null);
+
+
+  const selectedMenuDetails = useMemo(() => {
+    const details = (() => {
+      if (!selectedChef || !selectedMenuId) {
+        return null;
+      }
+
+      const menus = Array.isArray(selectedChef.portfolio?.menus)
+        ? selectedChef.portfolio.menus
+        : [];
+
+      return menus.find((menu: Menu) => getMenuIdentifier(menu) === selectedMenuId) || null;
+    })();
+    console.log('[FindChefPage] Selected menu details:', details);
+    return details;
+  }, [selectedChef, selectedMenuId]);
 
   const stripePromise = useMemo(() => {
     const publishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string | undefined;
     return publishableKey ? loadStripe(publishableKey) : null;
   }, []);
 
-  const fetchChefs = async (page = 1) => {
+  const fetchChefs = useCallback(async (page = 1) => {
     setLoading(true);
     try {
       const params = {
@@ -146,22 +181,29 @@ const FindChefPage: React.FC = () => {
         maxPrice: maxPrice || undefined,
         rating: minRating || undefined
       };
-      const { chefs, pagination } = await chefService.getChefs(params);
-      setChefs(chefs);
+      const { chefs: fetchedChefs, pagination } = await chefService.getChefs(params);
+      console.log('[FindChefPage] Fetched chefs:', fetchedChefs);
+      const uniqueChefs = fetchedChefs.filter((chef, index, self) =>
+        chef.user && chef.user.id && index === self.findIndex((c) => c.user && c.user.id === chef.user.id)
+      );
+      console.log('[FindChefPage] Unique chefs after deduplication:', uniqueChefs);
+      const validChefs = uniqueChefs.filter(chef => chef.user && chef.user.name);
+      console.log('[FindChefPage] Valid chefs after name check:', validChefs);
+      setChefs(validChefs);
       setPagination(pagination);
     } catch (error) {
       console.error('Failed to fetch chefs:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterServiceType, cuisineType, city, minPrice, maxPrice, minRating]);
 
   useEffect(() => {
     const debounce = setTimeout(() => {
       fetchChefs(1);
     }, 300);
     return () => clearTimeout(debounce);
-  }, [filterServiceType, cuisineType, city, minPrice, maxPrice, minRating]);
+  }, [filterServiceType, cuisineType, city, minPrice, maxPrice, minRating, fetchChefs]);
 
   const handlePageChange = (newPage: number) => {
     fetchChefs(newPage);
@@ -177,18 +219,35 @@ const FindChefPage: React.FC = () => {
     setSelectedMenuId('');
   };
 
-  const handleBookChef = (chef: any) => {
+
+
+
+
+  const handleBookChef = (chef: Chef, preferredMenuId?: string) => {
+    console.log('[FindChefPage] handleBookChef called with chef:', chef, 'and preferredMenuId:', preferredMenuId);
     if (!isAuthenticated) {
-      navigate('/login');
+      navigate('/login', { state: { from: '/chefs' } });
       return;
     }
     if (role !== 'client') {
       alert('Seuls les clients peuvent réserver un chef.');
       return;
     }
+
+    resetBookingFlow();
     setSelectedChef(chef);
-    const defaultMenuId = chef.portfolio?.menus?.[0]?._id || chef.portfolio?.menus?.[0]?.id || '';
-    setSelectedMenuId(defaultMenuId || '');
+
+    const availableMenus: Menu[] = Array.isArray(chef.portfolio?.menus)
+      ? chef.portfolio.menus
+      : [];
+
+    const resolvedMenu: Menu | undefined = preferredMenuId
+      ? availableMenus.find((menu: Menu) => getMenuIdentifier(menu) === preferredMenuId)
+      : availableMenus.find((menu: Menu) => menu?.isActive !== false) || (availableMenus.length > 0 ? availableMenus[0] : undefined);
+
+    const resolvedMenuId = resolvedMenu ? getMenuIdentifier(resolvedMenu) : '';
+    setSelectedMenuId(resolvedMenuId);
+
     setBookingServiceType((chef.serviceTypes && chef.serviceTypes[0]) || 'home-dining');
     setBookingDetails({
       date: '',
@@ -205,7 +264,7 @@ const FindChefPage: React.FC = () => {
       allergies: '',
       dietaryRestrictions: ''
     });
-    resetBookingFlow();
+
     setShowBookingModal(true);
   };
 
@@ -218,10 +277,28 @@ const FindChefPage: React.FC = () => {
       return;
     }
 
+    const guests = Number(bookingDetails.guests);
+    if (selectedMenuDetails) {
+      const minGuests = Number(selectedMenuDetails.minGuests) || 0;
+      const maxGuests = Number(selectedMenuDetails.maxGuests) || 0;
+
+      if (minGuests && guests < minGuests) {
+        setFormError(`Ce menu nécessite au moins ${minGuests} convives.`);
+        return;
+      }
+
+      if (maxGuests && guests > maxGuests) {
+        setFormError(`Ce menu accepte au maximum ${maxGuests} convives.`);
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     setFormError(null);
 
     try {
+      const normalizedSelectedMenuId = selectedMenuId?.trim() || undefined;
+
       const payload = {
         chefId: selectedChef._id || selectedChef.id,
         serviceType: bookingServiceType,
@@ -240,7 +317,7 @@ const FindChefPage: React.FC = () => {
           accessInstructions: bookingDetails.accessInstructions || undefined
         },
         menu: {
-          selectedMenu: selectedMenuId || undefined,
+          selectedMenu: normalizedSelectedMenuId,
           dietaryRestrictions: splitList(bookingDetails.dietaryRestrictions),
           allergies: splitList(bookingDetails.allergies)
         },
@@ -249,34 +326,84 @@ const FindChefPage: React.FC = () => {
 
       const { booking, quote } = await bookingService.createBooking(payload);
 
-      const fallbackQuote = (() => {
-        const basePriceValue = Number(booking?.pricing?.basePrice ?? 0);
-        const serviceFeeValue = Number(booking?.pricing?.serviceFee ?? 0);
-        const totalAmountValue = Number(booking?.pricing?.totalAmount ?? basePriceValue + serviceFeeValue);
-        const depositValue = Number(
+      if (!booking) {
+        throw new Error('Réservation non créée sur le serveur. Merci de réessayer.');
+      }
+
+      const typedBooking: Booking = booking;
+
+      const fallbackQuote: BookingQuote = (() => {
+        const toCurrency = (value: number | string | undefined | null) => {
+          const numericValue = Number(value) || 0;
+          return Math.round(numericValue * 100) / 100;
+        };
+
+        const durationValue = Number(bookingDetails.duration) || 0;
+        const guestsValue = Number(bookingDetails.guests) || 0;
+        const hourlyRateValue = Number(selectedChef.hourlyRate ?? 0);
+
+        const menuInfo = selectedMenuDetails
+          ? (() => {
+              const menu = selectedMenuDetails as Menu;
+              const unitPrice = toCurrency(menu.price);
+              return {
+                id: String(menu._id || menu.id || 'menu'),
+                name: menu.name || 'Menu sélectionné',
+                type: menu.type === 'horaire' ? 'horaire' : 'forfait',
+                unitPrice
+              };
+            })()
+          : null;
+
+        const derivedBase = menuInfo
+          ? (menuInfo.type === 'horaire'
+              ? toCurrency(menuInfo.unitPrice * durationValue)
+              : menuInfo.unitPrice)
+          : toCurrency(hourlyRateValue * durationValue);
+
+        const basePriceValue = toCurrency(typedBooking?.pricing?.basePrice ?? quote?.basePrice ?? derivedBase);
+        const serviceFeeValue = toCurrency(typedBooking?.pricing?.serviceFee ?? quote?.serviceFee ?? basePriceValue * 0.1);
+        const totalAmountValue = toCurrency(typedBooking?.pricing?.totalAmount ?? quote?.totalAmount ?? (basePriceValue + serviceFeeValue));
+        const depositValue = toCurrency(
           quote?.depositAmount ??
-          booking?.pricing?.depositAmount ??
-          booking?.payment?.depositAmount ??
-          Math.round(totalAmountValue * 0.2)
+          typedBooking?.pricing?.depositAmount ??
+          typedBooking?.payment?.depositAmount ??
+          totalAmountValue * 0.2
         );
 
         return {
-          reference: `Q-${(booking?._id || booking?.id || Math.random().toString(36).slice(-6)).toString().slice(-6).toUpperCase()}`,
+          reference: `Q-${(typedBooking?._id || typedBooking?.id || Math.random().toString(36).slice(-6)).toString().slice(-6).toUpperCase()}`,
           generatedAt: new Date().toISOString(),
           basePrice: basePriceValue,
           serviceFee: serviceFeeValue,
           totalAmount: totalAmountValue,
           depositAmount: depositValue,
-          remainingBalance: Math.max(totalAmountValue - depositValue, 0)
+          remainingBalance: toCurrency(Math.max(totalAmountValue - depositValue, 0)),
+          menu: menuInfo,
+          calculation: menuInfo
+            ? {
+                method: 'menu' as const,
+                menu: {
+                  ...menuInfo,
+                  durationHours: durationValue,
+                  guests: guestsValue
+                }
+              }
+            : {
+                method: 'hourly' as const,
+                hourlyRate: toCurrency(hourlyRateValue),
+                durationHours: durationValue,
+                guests: guestsValue
+              }
         };
       })();
 
-      setCreatedBooking(booking);
+      setCreatedBooking(typedBooking);
       setBookingQuote(quote || fallbackQuote);
       setBookingStep('quote');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Booking creation error:', error);
-      const message = error?.response?.data?.message || "Impossible de créer la réservation.";
+      const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message || "Impossible de créer la réservation.";
       setFormError(message);
     } finally {
       setIsSubmitting(false);
@@ -307,9 +434,9 @@ const FindChefPage: React.FC = () => {
         });
         setBookingStep('payment');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Payment intent error:', error);
-      const message = error?.response?.data?.message || "Impossible de préparer le paiement. Vérifiez vos informations.";
+      const message = (error as { response?: { data?: { message?: string } } })?.response?.data?.message || "Impossible de préparer le paiement. Vérifiez vos informations.";
       setPaymentMessage(message);
     } finally {
       setIsSubmitting(false);
@@ -371,33 +498,83 @@ const FindChefPage: React.FC = () => {
           <div className="text-center py-12">Aucun chef trouvé avec ces critères.</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {chefs.map((chef) => (
-              <div key={chef._id || chef.id} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
-                {chef.portfolio?.images?.[0] ? (
-                  <img src={chef.portfolio.images[0]} alt={chef.name} className="w-full h-48 object-cover" />
-                ) : (
-                  <div className="w-full h-48 bg-gray-200 flex items-center justify-center text-gray-500">Pas d'image</div>
-                )}
-                <div className="p-6 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-2xl font-bold text-gray-800">{chef.user?.name}</h2>
-                    <span className="inline-flex items-center text-sm text-gray-500"><MapPin className="h-4 w-4 mr-1" />{chef.serviceAreas?.[0]?.city || 'Toute France'}</span>
-                  </div>
-                  <p className="text-orange-500 font-semibold">{chef.specialty}</p>
-                  <div className="flex items-center space-x-2 text-sm text-gray-600">
-                    <Star className="h-5 w-5 text-yellow-400 fill-current" />
-                    <span>{chef.rating?.average?.toFixed(1) || 'N/A'} ({chef.rating?.count || 0} avis)</span>
-                  </div>
-                  <p className="text-gray-700 text-sm line-clamp-3">{chef.description}</p>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xl font-bold text-green-600">{chef.hourlyRate}€/h</span>
-                    <button onClick={() => handleBookChef(chef)} className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300">
-                      Réserver
-                    </button>
+            {chefs.map((chef) => {
+              const profileImage = chef.profilePicture || chef.user?.avatar || '/chef-images/default-profile.png';
+
+              return (
+                <div key={chef._id || chef.id} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
+                  <img
+                    src={profileImage}
+                    alt={chef.user?.name || 'Photo du chef'}
+                    className="w-full h-48 object-cover"
+                  />
+                  <div className="p-6 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <h2 className="text-2xl font-bold text-gray-800">{formatChefName(chef.user?.name)}</h2>
+                        {chef.isActive && <span className="ml-2 w-3 h-3 bg-green-500 rounded-full"></span>}
+                      </div>
+                      <span className="inline-flex items-center text-sm text-gray-500">
+                        <MapPin className="h-4 w-4 mr-1" />
+                        {chef.serviceAreas?.[0]?.city || 'Toute France'}
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-600 space-y-2">
+                      <p><span className="font-semibold">Spécialité:</span> {chef.specialty}</p>
+                      <p><span className="font-semibold">Expérience:</span> {chef.experience} ans</p>
+                      <p><span className="font-semibold">Taux horaire:</span> {formatCurrency(chef.hourlyRate)}</p>
+                      <p><span className="font-semibold">Cuisines:</span> {chef.cuisineTypes.join(', ')}</p>
+                      <p><span className="font-semibold">Services:</span> {chef.serviceTypes.join(', ')}</p>
+                    </div>
+                    <div className="flex items-center space-x-2 text-sm text-gray-600">
+                      <Star className="h-5 w-5 text-yellow-400 fill-current" />
+                      <span>{chef.rating?.average?.toFixed(1) || 'N/A'} ({chef.rating?.count || 0} avis)</span>
+                    </div>
+                    <p className="text-gray-700 text-sm line-clamp-3">{chef.description}</p>
+                    <div className="pt-4 border-t border-gray-100">
+                      <h3 className="text-lg font-semibold text-gray-800 mb-2">Offres du Chef</h3>
+                      {chef.portfolio?.menus && chef.portfolio.menus.length > 0 ? (
+                        <div className="space-y-4">
+                          {chef.portfolio.menus.slice(0, 2).map((menu) => (
+                            <div key={menu.id || menu.name} className="p-3 bg-gray-50 rounded-lg">
+                              <h4 className="font-semibold">{menu.name}</h4>
+                              <p className="text-sm text-gray-600">{menu.description}</p>
+                              <div className="flex justify-between items-center mt-2">
+                                <span className="font-bold text-lg text-emerald-600">{formatCurrency(menu.price)}</span>
+                                <button
+                                  onClick={() => handleBookChef(chef, menu.id)}
+                                  className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition duration-300"
+                                >
+                                  Réserver ce menu
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          {chef.portfolio.menus.length > 2 && (
+                            <button
+                              onClick={() => navigate(`/chefs/${chef.id}/menus`)}
+                              className="text-sm font-semibold text-green-600 hover:text-green-700 transition-colors w-full text-center mt-2"
+                            >
+                              Voir plus d'offres
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-500">Aucune offre disponible pour le moment.</p>
+                      )}
+                    </div>
+                    <div className="flex justify-end items-center pt-4 border-t border-gray-100">
+                      <button
+                        onClick={() => handleBookChef(chef)}
+                        className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg transition duration-300"
+                      >
+                        Réserver ce chef
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -409,6 +586,8 @@ const FindChefPage: React.FC = () => {
             <button onClick={() => handlePageChange(pagination.page + 1)} disabled={pagination.page === pagination.pages} className="px-4 py-2 border rounded-lg">Suivant</button>
           </div>
         )}
+
+
 
         {/* Booking Modal */}
         {showBookingModal && selectedChef && (
@@ -500,12 +679,34 @@ const FindChefPage: React.FC = () => {
                     <label className="block text-gray-700 text-sm font-bold mb-2">Sélection du menu</label>
                     <select value={selectedMenuId} onChange={(e) => setSelectedMenuId(e.target.value)} className="w-full p-3 border rounded-lg">
                       <option value="">Menu personnalisé</option>
-                      {selectedChef.portfolio?.menus?.map((menu: any) => (
-                        <option key={menu._id || menu.id} value={menu._id || menu.id}>
-                          {menu.name} · {formatCurrency(Number(menu.price || 0))}
-                        </option>
-                      ))}
+                      {selectedChef.portfolio?.menus?.map((menu: Menu) => {
+                        const menuId = getMenuIdentifier(menu);
+                        return (
+                          <option key={menuId} value={menuId}>
+                            {menu.name} · {formatCurrency(Number(menu.price || 0))}
+                          </option>
+                        );
+                      })}
                     </select>
+                    {selectedMenuDetails ? (
+                      <div className="mt-2 text-xs text-gray-500 space-y-1">
+                        <p>
+                          Tarif {selectedMenuDetails.type === 'horaire' ? 'horaire' : 'forfaitaire'} : {formatCurrency(Number(selectedMenuDetails.price || 0))}
+                          {selectedMenuDetails.type === 'horaire' ? ' / heure' : ''}
+                        </p>
+                        {(selectedMenuDetails.minGuests || selectedMenuDetails.maxGuests) && (
+                          <p>
+                            Convives acceptés : {selectedMenuDetails.minGuests || 1}
+                            {selectedMenuDetails.maxGuests ? ` à ${selectedMenuDetails.maxGuests}` : '+'}
+                          </p>
+                        )}
+                        {selectedMenuDetails.duration && (
+                          <p>Durée indicative : {selectedMenuDetails.duration}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-xs text-gray-500">Pas de menu prédéfini, le tarif est basé sur le taux horaire du chef.</p>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -538,8 +739,36 @@ const FindChefPage: React.FC = () => {
                   <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">Devis #{bookingQuote.reference}</h3>
                     <p className="text-sm text-gray-500 mb-4">Généré le {new Date(bookingQuote.generatedAt).toLocaleString('fr-FR')}</p>
-                    <div className="space-y-2 text-sm text-gray-600">
-                      <div className="flex items-center justify-between"><span>Prix de base ({bookingDetails.duration}h x {selectedChef.hourlyRate}€)</span><strong>{formatCurrency(bookingQuote.basePrice)}</strong></div>
+                    <div className="space-y-3 text-sm text-gray-600">
+                      {bookingQuote.menu ? (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <span>Menu sélectionné</span>
+                            <strong>{bookingQuote.menu.name}</strong>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>
+                              {bookingQuote.menu.type === 'horaire'
+                                ? `Tarif horaire (${formatCurrency(bookingQuote.menu.unitPrice)} / h × ${(bookingQuote.calculation?.menu?.durationHours ?? Number(bookingDetails.duration))}h)`
+                                : 'Forfait chef'}
+                            </span>
+                            <strong>{formatCurrency(bookingQuote.basePrice)}</strong>
+                          </div>
+                          {bookingQuote.calculation?.menu?.guests ? (
+                            <div className="flex items-center justify-between text-xs text-gray-500">
+                              <span>Convives</span>
+                              <span>{bookingQuote.calculation.menu.guests}</span>
+                            </div>
+                          ) : null}
+                        </>
+                      ) : (
+                        <div className="flex items-center justify-between">
+                          <span>
+                            Tarif horaire ({formatCurrency(bookingQuote.calculation?.hourlyRate ?? Number(selectedChef.hourlyRate || 0))} × {(bookingQuote.calculation?.durationHours ?? Number(bookingDetails.duration))}h)
+                          </span>
+                          <strong>{formatCurrency(bookingQuote.basePrice)}</strong>
+                        </div>
+                      )}
                       <div className="flex items-center justify-between"><span>Frais de service (10%)</span><strong>{formatCurrency(bookingQuote.serviceFee)}</strong></div>
                       <div className="flex items-center justify-between text-lg font-semibold text-gray-900"><span>Total</span><span>{formatCurrency(bookingQuote.totalAmount)}</span></div>
                       <div className="flex items-center justify-between text-emerald-600 font-semibold"><span>Acompte sécurisé (20%)</span><span>{formatCurrency(bookingQuote.depositAmount)}</span></div>
@@ -614,7 +843,13 @@ const FindChefPage: React.FC = () => {
                   {paymentMessage && <p className="text-sm text-emerald-600">{paymentMessage}</p>}
                   <div className="bg-gray-50 border border-gray-100 rounded-xl p-4 text-sm text-gray-600 space-y-2">
                     <p><strong>Référence :</strong> {bookingQuote.reference}</p>
+                    {bookingQuote.menu && (
+                      <p><strong>Menu :</strong> {bookingQuote.menu.name}</p>
+                    )}
                     <p><strong>Date de l'évènement :</strong> {bookingDetails.date ? new Date(bookingDetails.date).toLocaleDateString('fr-FR') : '—'} à {bookingDetails.time}</p>
+                    {bookingQuote.calculation?.method === 'menu' && bookingQuote.calculation.menu ? (
+                      <p><strong>Participants :</strong> {bookingQuote.calculation.menu.guests}</p>
+                    ) : null}
                     <p><strong>Montant total :</strong> {formatCurrency(bookingQuote.totalAmount)} (Acompte payé : {formatCurrency(bookingQuote.depositAmount)})</p>
                   </div>
                   <div className="flex flex-col sm:flex-row justify-end gap-3">

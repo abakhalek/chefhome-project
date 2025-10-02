@@ -1,10 +1,32 @@
 import { apiClient } from './apiClient';
+import { API_CONFIG } from '../utils/constants';
+import { Chef, SearchFilters, ApiResponse, Review, Booking, Menu, Notification, DashboardStats } from '../types';
 
+const API_SERVER_BASE = API_CONFIG.BASE_URL.replace(/\/api\/?$/, '');
+
+const toAbsoluteUrl = (path?: string | null): string | null => {
+  if (!path) {
+    return null;
+  }
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+  const normalisedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${API_SERVER_BASE}${normalisedPath}`;
+};
+
+const normaliseDateString = (value?: string | Date | null): string | null => {
+  if (!value) {
+    return null;
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
 
 export interface ChefDocumentStatus {
   uploaded: boolean;
-  url?: string;
-  uploadedAt?: string | null;
+  url: string | null;
+  uploadedAt: string | null;
 }
 
 export interface UploadedChefDocument {
@@ -12,7 +34,6 @@ export interface UploadedChefDocument {
   url: string | null;
   uploadedAt: string | null;
 }
-
 
 export interface ChefProfile {
   id: string;
@@ -22,7 +43,6 @@ export interface ChefProfile {
   address: string;
   city: string;
   zipCode: string;
-  profilePicture?: string; // Add this line
   specialty: string;
   experience: number;
   hourlyRate: number;
@@ -30,313 +50,339 @@ export interface ChefProfile {
   cuisineTypes: string[];
   serviceTypes: string[];
   serviceAreas: Array<{
+    id?: string;
     city: string;
     zipCodes: string[];
     maxDistance: number;
   }>;
   certifications: Array<{
+    id?: string;
     name: string;
     issuer: string;
-    dateObtained: string;
-    expiryDate?: string;
+    dateObtained: string | null;
+    expiryDate: string | null;
+    documentUrl?: string | null;
   }>;
-  documents: {
-    cv: ChefDocumentStatus;
-    insurance: ChefDocumentStatus;
-    healthCertificate: ChefDocumentStatus;
-    businessLicense: ChefDocumentStatus;
-  };
-  portfolio: {
-    images: string[];
-    description?: string;
-  };
-  verification: {
-    status: 'pending' | 'approved' | 'rejected' | 'suspended';
-    verifiedAt?: string;
-  };
-  rating: {
-    average: number;
-    count: number;
-  };
-}
-
-export interface ChefMenu {
-  _id: string;
-  name: string;
-  description: string;
-  price: number;
-  type: 'forfait' | 'horaire';
-  category: string;
-  courses: string[];
-  ingredients: string[];
-  allergens: string[];
-  dietaryOptions: string[];
-  duration: string;
-  minGuests: number;
-  maxGuests: number;
-  image?: string | null;
-  isActive: boolean;
+  documents: Record<string, ChefDocumentStatus>;
+  profilePicture: string | null;
   createdAt?: string;
   updatedAt?: string;
-}
-
-export interface Mission {
-  id: string;
-  client: {
+  user?: {
+    id: string;
     name: string;
     email: string;
-    phone: string;
-    avatar?: string;
+    phone?: string;
+    avatar?: string | null;
   };
-  date: string;
-  time: string;
-  duration: string;
-  guests: number;
-  type: string;
-  location: string;
-  price: string;
-  status: 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'disputed';
-  specialRequests: string;
-  urgency: 'normal' | 'urgent';
-  submittedAt: string;
 }
 
-export interface Earnings {
-  id: string;
-  date: string;
-  client: string;
-  type: string;
-  amount: number;
-  commission: number;
-  netAmount: number;
-  status: 'paid' | 'pending' | 'processing';
-  rating?: number;
-  review?: string;
-}
+const DEFAULT_DOCUMENT_KEYS = ['cv', 'insurance', 'healthCertificate', 'businessLicense'] as const;
 
-const normaliseId = (value: any): string => {
-  if (!value) return '';
-  if (typeof value === 'string') return value;
-  if (value.id) return String(value.id);
-  if (value._id) return String(value._id);
-  return String(value);
-};
-
-const mapDocumentStatus = (doc?: { url?: string; uploadedAt?: string | null }): ChefDocumentStatus => ({
-  uploaded: Boolean(doc?.url),
-  url: doc?.url || undefined,
-  uploadedAt: doc?.uploadedAt ? new Date(doc.uploadedAt).toISOString() : null
+const toDocumentStatus = (document?: { url?: string | null; uploadedAt?: string | Date | null }): ChefDocumentStatus => ({
+  uploaded: Boolean(document?.url),
+  url: document?.url ? toAbsoluteUrl(document.url) : null,
+  uploadedAt: normaliseDateString(document?.uploadedAt ?? null),
 });
 
-const mapChefProfileFromApi = (chef: any): ChefProfile => {
-  const user = chef?.user || {};
-  const address = user.address || {};
+const normaliseDocuments = (documents?: Record<string, { url?: string | null; uploadedAt?: string | Date | null }> | null): Record<string, ChefDocumentStatus> => {
+  const result: Record<string, ChefDocumentStatus> = {};
 
-  return {
-    id: normaliseId(chef),
-    name: user.name || '',
-    email: user.email || '',
-    phone: user.phone || '',
-    address: address.street || '',
-    city: address.city || '',
-    zipCode: address.zipCode || '',
-    profilePicture: chef.profilePicture || undefined, // Add this line
-    specialty: chef.specialty || '',
-    experience: chef.experience || 0,
-    hourlyRate: chef.hourlyRate || 0,
-    description: chef.description || '',
-    cuisineTypes: Array.isArray(chef.cuisineTypes) ? chef.cuisineTypes : [],
-    serviceTypes: Array.isArray(chef.serviceTypes) ? chef.serviceTypes : [],
-    serviceAreas: Array.isArray(chef.serviceAreas)
-      ? chef.serviceAreas.map((area: any) => ({
-          city: area?.city || '',
-          zipCodes: Array.isArray(area?.zipCodes) ? area.zipCodes : [],
-          maxDistance: area?.maxDistance || 0
-        }))
-      : [],
-    certifications: Array.isArray(chef.certifications)
-      ? chef.certifications.map((cert: any) => ({
-          name: cert?.name || '',
-          issuer: cert?.issuer || '',
-          dateObtained: cert?.dateObtained ? new Date(cert.dateObtained).toISOString() : '',
-          expiryDate: cert?.expiryDate ? new Date(cert.expiryDate).toISOString() : undefined
-        }))
-      : [],
-    documents: {
-      cv: mapDocumentStatus(chef?.documents?.cv),
-      insurance: mapDocumentStatus(chef?.documents?.insurance),
-      healthCertificate: mapDocumentStatus(chef?.documents?.healthCertificate),
-      businessLicense: mapDocumentStatus(chef?.documents?.businessLicense)
-    },
-    portfolio: {
-      images: Array.isArray(chef?.portfolio?.images) ? chef.portfolio.images : [],
-      description: chef?.portfolio?.description || ''
-    },
-    verification: {
-      status: chef?.verification?.status || 'pending',
-      verifiedAt: chef?.verification?.verifiedAt ? new Date(chef.verification.verifiedAt).toISOString() : undefined
-    },
-    rating: {
-      average: chef?.rating?.average || 0,
-      count: chef?.rating?.count || 0
-    }
-  };
+  DEFAULT_DOCUMENT_KEYS.forEach((key) => {
+    result[key] = toDocumentStatus(documents?.[key]);
+  });
+
+  if (documents) {
+    Object.keys(documents).forEach((key) => {
+      if (!result[key]) {
+        result[key] = toDocumentStatus(documents[key]);
+      }
+    });
+  }
+
+  return result;
 };
-const toStringArray = (value?: string[]) =>
-  Array.isArray(value) ? value.map(item => item.trim()).filter(Boolean) : [];
 
-const mapMenuFromApi = (menu: any): ChefMenu => ({
-  _id: normaliseId(menu),
-  name: menu?.name || '',
-  description: menu?.description || '',
-  price: Number(menu?.price) || 0,
-  type: (menu?.type === 'horaire' ? 'horaire' : 'forfait'),
-  category: menu?.category || '',
-  courses: Array.isArray(menu?.courses)
-    ? menu.courses
-        .map((course: any) =>
-          typeof course === 'string' ? course : course?.name || ''
-        )
-        .filter(Boolean)
-    : [],
-  ingredients: toStringArray(menu?.ingredients),
-  allergens: toStringArray(menu?.allergens),
-  dietaryOptions: toStringArray(menu?.dietaryOptions),
-  duration: menu?.duration || '',
-  minGuests: Number(menu?.minGuests) || 1,
-  maxGuests: Number(menu?.maxGuests) || 1,
-  image: menu?.image || null,
-  isActive: menu?.isActive ?? true,
-  createdAt: menu?.createdAt ? new Date(menu.createdAt).toISOString() : undefined,
-  updatedAt: menu?.updatedAt ? new Date(menu.updatedAt).toISOString() : undefined
-});
+const transformChefProfileResponse = (rawProfile: any): ChefProfile => {
+  if (!rawProfile) {
+    throw new Error('Profil chef invalide.');
+  }
 
-const prepareMenuPayload = (menuData: Partial<ChefMenu>) => ({
-  name: menuData.name,
-  description: menuData.description,
-  price: menuData.price,
-  type: menuData.type,
-  category: menuData.category,
-  courses: Array.isArray(menuData.courses)
-    ? menuData.courses.map((course, index) => ({
-        name: course,
-        order: index + 1
+  const user = rawProfile.user ?? {};
+  const userAddress = user.address ?? {};
+
+  const serviceAreas = Array.isArray(rawProfile.serviceAreas)
+    ? rawProfile.serviceAreas.map((area: any) => ({
+        id: area?.id ?? area?._id,
+        city: area?.city ?? '',
+        zipCodes: Array.isArray(area?.zipCodes) ? area.zipCodes : [],
+        maxDistance: typeof area?.maxDistance === 'number' ? area.maxDistance : Number(area?.maxDistance ?? 0),
       }))
-    : [],
-  ingredients: toStringArray(menuData.ingredients),
-  allergens: toStringArray(menuData.allergens),
-  dietaryOptions: toStringArray(menuData.dietaryOptions),
-  duration: menuData.duration,
-  minGuests: menuData.minGuests,
-  maxGuests: menuData.maxGuests,
-  image: menuData.image,
-  isActive: menuData.isActive
-});
-
-const mapMissionFromBooking = (booking: any): Mission => {
-  const client = booking?.client || {};
-  const eventDetails = booking?.eventDetails || {};
-  const location = booking?.location || {};
-  const pricing = booking?.pricing || {};
-  const totalAmount = Number(pricing?.totalAmount ?? 0);
-
-  return {
-    id: normaliseId(booking),
-    client: {
-      name: client?.name || '',
-      email: client?.email || '',
-      phone: client?.phone || '',
-      avatar: client?.avatar
-    },
-    date: eventDetails?.date ? new Date(eventDetails.date).toISOString() : '',
-    time: eventDetails?.startTime || '',
-    duration: eventDetails?.duration ? `${eventDetails.duration}h` : '',
-    guests: eventDetails?.guests || 0,
-    type: booking?.serviceType || '',
-    location: [location?.address, location?.city, location?.zipCode].filter(Boolean).join(', '),
-    price: `${totalAmount.toFixed(2)}€`,
-    status: booking?.status || 'pending',
-    specialRequests: booking?.menu?.customRequests || '',
-    urgency: 'normal',
-    submittedAt: booking?.createdAt ? new Date(booking.createdAt).toISOString() : ''
-  };
-};
-
-const mapEarningsResponse = (data: any) => {
-  const earnings = data?.earnings || {};
-  const total = earnings?.total || {
-    totalEarnings: 0,
-    totalCommission: 0,
-    totalBookings: 0,
-    averageRating: 0
-  };
-
-  const daily: Earnings[] = Array.isArray(earnings?.daily)
-    ? earnings.daily.map((item: any) => {
-        const totalEarnings = item?.totalEarnings || 0;
-        const commission = item?.commission || 0;
-        return {
-          id: normaliseId(item) || String(item?._id || item?.date || Math.random()),
-          date: item?._id || item?.date || new Date().toISOString(),
-          client: 'Clients multiples',
-          type: 'mission',
-          amount: totalEarnings,
-          commission,
-          netAmount: totalEarnings - commission,
-          status: 'paid',
-          rating: undefined,
-          review: undefined
-        };
-      })
     : [];
 
-  const summary = {
-    totalEarnings: total.totalEarnings || 0,
-    totalCommission: total.totalCommission || 0,
-    totalBookings: total.totalBookings || 0,
-    averageRating: total.averageRating || 0,
-    averagePerMission:
-      total.totalBookings ? (total.totalEarnings || 0) / total.totalBookings : 0
-  };
-
-  const totalWithAverage = {
-    ...total,
-    averagePerMission: summary.averagePerMission
-  };
+  const certifications = Array.isArray(rawProfile.certifications)
+    ? rawProfile.certifications.map((cert: any) => ({
+        id: cert?.id ?? cert?._id,
+        name: cert?.name ?? '',
+        issuer: cert?.issuer ?? '',
+        dateObtained: normaliseDateString(cert?.dateObtained ?? null),
+        expiryDate: normaliseDateString(cert?.expiryDate ?? null),
+        documentUrl: cert?.documentUrl ? toAbsoluteUrl(cert.documentUrl) : null,
+      }))
+    : [];
 
   return {
-    earnings: {
-      daily,
-      total: totalWithAverage,
-      monthly: Array.isArray(earnings?.monthly) ? earnings.monthly : []
-    },
-    summary,
-    pagination: null
+    id: rawProfile.id ?? rawProfile._id ?? '',
+    name: rawProfile.name ?? user.name ?? '',
+    email: rawProfile.email ?? user.email ?? '',
+    phone: rawProfile.phone ?? user.phone ?? '',
+    address: rawProfile.address ?? userAddress.street ?? '',
+    city: rawProfile.city ?? userAddress.city ?? '',
+    zipCode: rawProfile.zipCode ?? userAddress.zipCode ?? '',
+    specialty: rawProfile.specialty ?? '',
+    experience: typeof rawProfile.experience === 'number' ? rawProfile.experience : Number(rawProfile.experience ?? 0),
+    hourlyRate: typeof rawProfile.hourlyRate === 'number' ? rawProfile.hourlyRate : Number(rawProfile.hourlyRate ?? 0),
+    description: rawProfile.description ?? '',
+    cuisineTypes: Array.isArray(rawProfile.cuisineTypes) ? rawProfile.cuisineTypes : [],
+    serviceTypes: Array.isArray(rawProfile.serviceTypes) ? rawProfile.serviceTypes : [],
+    serviceAreas,
+    certifications,
+    documents: normaliseDocuments(rawProfile.documents),
+    profilePicture: toAbsoluteUrl(rawProfile.profilePicture),
+    createdAt: rawProfile.createdAt ?? undefined,
+    updatedAt: rawProfile.updatedAt ?? undefined,
+    user: user?.id || user?._id
+      ? {
+          id: user.id ?? user._id,
+          name: user.name ?? '',
+          email: user.email ?? '',
+          phone: user.phone ?? '',
+          avatar: toAbsoluteUrl(user.avatar),
+        }
+      : undefined,
   };
+};
+
+const buildChefProfilePayload = (profile: Partial<ChefProfile>): Record<string, unknown> => {
+  const payload: Record<string, unknown> = {};
+
+  if (profile.name !== undefined) payload.name = profile.name;
+  if (profile.email !== undefined) payload.email = profile.email;
+  if (profile.phone !== undefined) payload.phone = profile.phone;
+  if (profile.address !== undefined) payload.address = profile.address;
+  if (profile.city !== undefined) payload.city = profile.city;
+  if (profile.zipCode !== undefined) payload.zipCode = profile.zipCode;
+  if (profile.specialty !== undefined) payload.specialty = profile.specialty;
+  if (profile.experience !== undefined) payload.experience = Number(profile.experience);
+  if (profile.hourlyRate !== undefined) payload.hourlyRate = Number(profile.hourlyRate);
+  if (profile.description !== undefined) payload.description = profile.description;
+  if (profile.cuisineTypes !== undefined) payload.cuisineTypes = profile.cuisineTypes;
+  if (profile.serviceTypes !== undefined) payload.serviceTypes = profile.serviceTypes;
+
+  if (profile.serviceAreas !== undefined) {
+    payload.serviceAreas = profile.serviceAreas.map((area) => ({
+      city: area.city,
+      zipCodes: Array.isArray(area.zipCodes) ? area.zipCodes : [],
+      maxDistance: Number(area.maxDistance ?? 0),
+    }));
+  }
+
+  if (profile.certifications !== undefined) {
+    payload.certifications = profile.certifications.map((cert) => ({
+      name: cert.name,
+      issuer: cert.issuer,
+      dateObtained: cert.dateObtained ? new Date(cert.dateObtained).toISOString() : null,
+      expiryDate: cert.expiryDate ? new Date(cert.expiryDate).toISOString() : null,
+      documentUrl: cert.documentUrl ?? null,
+    }));
+  }
+
+  return payload;
 };
 
 export const chefService = {
-  // Profile Management
+  async getChefs(params: SearchFilters): Promise<ApiResponse<Chef[]>> {
+    const response = await apiClient.get('/chefs', { params });
+    return response.data;
+  },
+
+  async getChefProfile(chefId: string): Promise<{ success: boolean; chef: Chef }> {
+    const response = await apiClient.get(`/chefs/${chefId}`);
+    return response.data;
+  },
+
+  async updateChefProfile(chefId: string, chefData: Partial<Chef>): Promise<ApiResponse<Chef>> {
+    const response = await apiClient.put(`/chefs/${chefId}`, chefData);
+    return response.data;
+  },
+
+  async updateChefPortfolio(chefId: string, portfolioData: Partial<Chef['portfolio']>): Promise<ApiResponse<Chef>> {
+    const response = await apiClient.put(`/chefs/${chefId}/portfolio`, portfolioData);
+    return response.data;
+  },
+
+  async updateChefAvailability(chefId: string, availabilityData: Partial<Chef['availability']>): Promise<ApiResponse<Chef>> {
+    const response = await apiClient.put(`/chefs/${chefId}/availability`, availabilityData);
+    return response.data;
+  },
+
+  async addChefCertification(chefId: string, certificationData: Partial<Chef['certifications'][0]>): Promise<ApiResponse<Chef>> {
+    const response = await apiClient.post(`/chefs/${chefId}/certifications`, certificationData);
+    return response.data;
+  },
+
+  async updateChefCertification(chefId: string, certificationId: string, certificationData: Partial<Chef['certifications'][0]>): Promise<ApiResponse<Chef>> {
+    const response = await apiClient.put(`/chefs/${chefId}/certifications/${certificationId}`, certificationData);
+    return response.data;
+  },
+
+  async deleteChefCertification(chefId: string, certificationId: string): Promise<ApiResponse<unknown>> {
+    const response = await apiClient.delete(`/chefs/${chefId}/certifications/${certificationId}`);
+    return response.data;
+  },
+
+  async addChefDocument(chefId: string, documentData: Partial<Chef['documents']>): Promise<ApiResponse<Chef>> {
+    const response = await apiClient.post(`/chefs/${chefId}/documents`, documentData);
+    return response.data;
+  },
+
+  async deleteChefDocument(chefId: string, documentId: string): Promise<ApiResponse<unknown>> {
+    const response = await apiClient.delete(`/chefs/${chefId}/documents/${documentId}`);
+    return response.data;
+  },
+
+  async getChefReviews(chefId: string): Promise<ApiResponse<Review[]>> {
+    const response = await apiClient.get(`/chefs/${chefId}/reviews`);
+    return response.data;
+  },
+
+  async getChefBookings(chefId: string, filters: SearchFilters): Promise<ApiResponse<Booking[]>> {
+    const response = await apiClient.get(`/chefs/${chefId}/bookings`, { params: filters });
+    return response.data;
+  },
+
+  async getChefMenus(chefId: string): Promise<{ success: boolean; chef: Partial<Chef>; menus: Menu[] }> {
+    const response = await apiClient.get(`/chefs/${chefId}/menus`);
+    return response.data;
+  },
+
+  async getChefMenu(chefId: string, menuId: string): Promise<ApiResponse<Menu>> {
+    const response = await apiClient.get(`/chefs/${chefId}/menus/${menuId}`);
+    return response.data;
+  },
+
+  async createChefMenu(chefId: string, menuData: Partial<Menu>): Promise<ApiResponse<Menu>> {
+    const response = await apiClient.post(`/chefs/${chefId}/menus`, menuData);
+    return response.data;
+  },
+
+  async updateChefMenu(chefId: string, menuId: string, menuData: Partial<Menu>): Promise<ApiResponse<Menu>> {
+    const response = await apiClient.put(`/chefs/${chefId}/menus/${menuId}`, menuData);
+    return response.data;
+  },
+
+  async deleteChefMenu(chefId: string, menuId: string): Promise<ApiResponse<unknown>> {
+    const response = await apiClient.delete(`/chefs/${chefId}/menus/${menuId}`);
+    return response.data;
+  },
+
+  async getChefNotifications(chefId: string): Promise<ApiResponse<Notification[]>> {
+    const response = await apiClient.get(`/chefs/${chefId}/notifications`);
+    return response.data;
+  },
+
+  async markChefNotificationAsRead(chefId: string, notificationId: string): Promise<ApiResponse<unknown>> {
+    const response = await apiClient.put(`/chefs/${chefId}/notifications/${notificationId}/read`);
+    return response.data;
+  },
+
+  async updateBookingStatus(bookingId: string, status: string): Promise<ApiResponse<Booking>> {
+    const response = await apiClient.put(`/bookings/${bookingId}/status`, { status });
+    return response.data;
+  },
+
+  async getChefDashboardStats(chefId: string): Promise<ApiResponse<DashboardStats>> {
+    const response = await apiClient.get(`/chefs/${chefId}/dashboard/stats`);
+    return response.data;
+  },
+
+  async getChefEarnings(chefId: string, filters: SearchFilters): Promise<ApiResponse<unknown>> {
+    const response = await apiClient.get(`/chefs/${chefId}/earnings`, { params: filters });
+    return response.data;
+  },
+
+  async requestPayout(chefId: string, amount: number): Promise<ApiResponse<unknown>> {
+    const response = await apiClient.post(`/chefs/${chefId}/payouts`, { amount });
+    return response.data;
+  },
+
+  async updateChefServiceAreas(chefId: string, serviceAreas: Chef['serviceAreas']): Promise<ApiResponse<Chef>> {
+    const response = await apiClient.put(`/chefs/${chefId}/service-areas`, { serviceAreas });
+    return response.data;
+  },
+
+  async updateChefSpecialties(chefId: string, specialties: Chef['cuisineTypes']): Promise<ApiResponse<Chef>> {
+    const response = await apiClient.put(`/chefs/${chefId}/specialties`, { specialties });
+    return response.data;
+  },
+
+  async uploadChefDocument(chefId: string, file: File, documentType: string): Promise<ApiResponse<unknown>> {
+    const formData = new FormData();
+    formData.append('document', file);
+    formData.append('documentType', documentType);
+    const response = await apiClient.post(`/chefs/${chefId}/documents/upload`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  async uploadChefImage(chefId: string, file: File): Promise<ApiResponse<unknown>> {
+    const formData = new FormData();
+    formData.append('image', file);
+    const response = await apiClient.post(`/chefs/${chefId}/images/upload`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  async deleteChefImage(chefId: string, imageUrl: string): Promise<ApiResponse<unknown>> {
+    const response = await apiClient.delete(`/chefs/${chefId}/images`, { data: { imageUrl } });
+    return response.data;
+  },
+
   async getProfile(): Promise<ChefProfile> {
     const response = await apiClient.get('/chefs/me/profile');
-    return mapChefProfileFromApi(response.data.chef);
+    if (!response.data?.chef) {
+      throw new Error('Impossible de récupérer le profil du chef.');
+    }
+    return transformChefProfileResponse(response.data.chef);
   },
 
   async updateProfile(profileData: Partial<ChefProfile>): Promise<ChefProfile> {
-    const response = await apiClient.put('/chefs/me/profile', profileData);
-   return mapChefProfileFromApi(response.data.chef);
+    const payload = buildChefProfilePayload(profileData);
+    const response = await apiClient.put('/chefs/me/profile', payload);
+    if (!response.data?.chef) {
+      throw new Error('La mise à jour du profil a échoué.');
+    }
+    return transformChefProfileResponse(response.data.chef);
   },
 
-  async uploadProfilePicture(file: File): Promise<{ profilePicture: string }> {
+  async uploadProfilePicture(file: File): Promise<{ profilePicture: string | null }> {
     const formData = new FormData();
     formData.append('profilePicture', file);
 
     const response = await apiClient.post('/chefs/me/profile-picture', formData, {
       headers: {
-         'Content-Type': 'multipart/form-data'
-      }
+        'Content-Type': 'multipart/form-data',
+      },
     });
-    return response.data;
+
+    return {
+      profilePicture: toAbsoluteUrl(response.data?.profilePicture) ?? null,
+    };
   },
 
   async uploadDocument(documentType: string, file: File): Promise<UploadedChefDocument> {
@@ -346,14 +392,15 @@ export const chefService = {
 
     const response = await apiClient.post('/chefs/me/documents', formData, {
       headers: {
-         'Content-Type': 'multipart/form-data'
-      }
+        'Content-Type': 'multipart/form-data',
+      },
     });
-     const document = response.data?.document ?? {};
+
+    const document = response.data?.document ?? {};
     return {
       type: document.type ?? documentType,
-      url: document.url ?? null,
-      uploadedAt: document.uploadedAt ?? null
+      url: document.url ? toAbsoluteUrl(document.url) : null,
+      uploadedAt: normaliseDateString(document.uploadedAt ?? null),
     };
   },
 
@@ -362,132 +409,8 @@ export const chefService = {
     const document = response.data?.document ?? {};
     return {
       type: document.type ?? documentType,
-      url: document.url ?? null,
-      uploadedAt: document.uploadedAt ?? null
+      url: document.url ? toAbsoluteUrl(document.url) : null,
+      uploadedAt: normaliseDateString(document.uploadedAt ?? null),
     };
   },
-
-  async uploadPortfolioImage(file: File): Promise<{ url: string }> {
-    const formData = new FormData();
-    formData.append('image', file);
-
-    const response = await apiClient.post('/chefs/me/portfolio/images', formData, {
-      headers: {
-         'Content-Type': 'multipart/form-data'
-      }
-    });
-    return response.data;
-  },
-
-  async uploadMenuImage(menuId: string, file: File): Promise<{ url: string }> {
-    const formData = new FormData();
-    formData.append('image', file);
-
-    const response = await apiClient.post(`/chefs/me/menus/${menuId}/image`, formData, {
-      headers: {
-         'Content-Type': 'multipart/form-data'
-      }
-    });
-    return response.data;
-  },
-
-  // Menu Management
-  async getMenus(): Promise<ChefMenu[]> {
-    const response = await apiClient.get('/chefs/me/menus');
-     return Array.isArray(response.data.menus)
-      ? response.data.menus.map(mapMenuFromApi)
-      : [];
-  },
-
-  async createMenu(menuData: Partial<ChefMenu>): Promise<ChefMenu> {
-    const response = await apiClient.post('/chefs/me/menus', prepareMenuPayload(menuData));
-    return mapMenuFromApi(response.data.menu);
-  },
-
-  async updateMenu(_id: string, menuData: Partial<ChefMenu>): Promise<ChefMenu> {
-    const response = await apiClient.put(`/chefs/me/menus/${_id}`, prepareMenuPayload(menuData));
-    return mapMenuFromApi(response.data.menu);
-  },
-
-  async deleteMenu(_id: string): Promise<void> {
-    await apiClient.delete(`/chefs/me/menus/${_id}`);
-  },
-
-  // Planning & Missions
-   async getMissions(params?: { status?: string; page?: number; limit?: number }): Promise<{
-    missions: Mission[];
-    pagination: any;
-  }> {
-    const response = await apiClient.get('/chefs/me/bookings', { params });
-    return {
-      missions: Array.isArray(response.data.bookings)
-        ? response.data.bookings.map(mapMissionFromBooking)
-        : [],
-      pagination: response.data.pagination
-    };
-  },
-  async updateMissionStatus(missionId: string, status: string, note?: string): Promise<Mission> {
-    const response = await apiClient.put(`/bookings/${missionId}/status`, { status, note });
-    return mapMissionFromBooking(response.data.booking);
-  },
-
-  async getAvailability(): Promise<any> {
-    const response = await apiClient.get('/chefs/me/availability');
-    return response.data.availability;
-  },
-
-  async updateAvailability(availability: any): Promise<any> {
-    const response = await apiClient.put('/chefs/me/availability', availability);
-    return response.data.availability;
-  },
-
-  async acceptMission(missionId: string): Promise<Mission> {
-    const response = await apiClient.post(`/chefs/me/missions/${missionId}/accept`);
-    return this.updateMissionStatus(missionId, 'confirmed', 'Mission acceptée par le chef');
-  },
-
-  async declineMission(missionId: string, reason?: string): Promise<void> {
-    await apiClient.put(`/bookings/${missionId}/status`, {
-      status: 'cancelled',
-      note: reason || 'Mission déclinée par le chef'
-    });
-  },
-
-  // Earnings & Statistics
-  async getEarnings(params?: { period?: string; page?: number; limit?: number }) {
-    const response = await apiClient.get('/chefs/me/earnings', { params });
-    return mapEarningsResponse(response.data);
-  },
-  async getStatistics(period?: string): Promise<any> {
-    const response = await apiClient.get('/chefs/me/statistics', { params: { period } });
-    return response.data.statistics;
-  },
-
-  async exportEarnings(format: 'csv' | 'pdf', period?: string): Promise<Blob> {
-    const response = await apiClient.get('/chefs/me/earnings/export', {
-      params: { format, period },
-      responseType: 'blob'
-    });
-    return response.data;
-  },
-
-  // Public Chef Listing
-  async getChefs(params?: {
-    page?: number;
-    limit?: number;
-    city?: string;
-    cuisineType?: string;
-    serviceType?: string;
-    minPrice?: number;
-    maxPrice?: number;
-    rating?: number;
-    sortBy?: string;
-    sortOrder?: string;
-  }): Promise<{
-    chefs: any[]; // Use 'any' for now, define a proper interface later if needed
-    pagination: any;
-  }> {
-    const response = await apiClient.get('/chefs', { params });
-    return response.data;
-  }
 };

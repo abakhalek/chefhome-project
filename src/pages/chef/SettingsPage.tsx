@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Settings, Bell, Lock, CreditCard, User } from 'lucide-react';
+import { Bell, Lock, CreditCard, User } from 'lucide-react';
 
 const SettingsPage: React.FC = () => {
   const [activeSection, setActiveSection] = useState('profile');
