@@ -386,12 +386,16 @@ router.put('/chefs/:id/verify', async (req, res) => {
 
     // Send real-time notification
     const io = req.app.get('io');
-    io.to(`user-${chef.user._id}`).emit('verification-update', {
-      status,
-      message: status === 'approved' 
-        ? 'Your chef application has been approved!' 
-        : 'Your chef application has been rejected.'
-    });
+    if (io && typeof io.to === 'function') {
+      io.to(`user-${chef.user._id}`).emit('verification-update', {
+        status,
+        message: status === 'approved'
+          ? 'Your chef application has been approved!'
+          : 'Your chef application has been rejected.'
+      });
+    } else {
+      console.warn('[Admin] Socket.io instance not available for verification update');
+    }
 
     res.json({
       success: true,

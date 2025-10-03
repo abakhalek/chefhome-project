@@ -68,16 +68,26 @@ const getChefIdentifier = (chef: Chef | null | undefined): string => {
 
 const getChefDisplayName = (chef: Chef | null | undefined): string => {
   if (!chef) {
-    return '';
+    return 'Chef Anonyme';
   }
 
-  const candidate = chef as unknown as { user?: unknown; name?: unknown };
+  const candidate = chef as unknown as {
+    user?: unknown;
+    name?: unknown;
+    specialty?: unknown;
+  };
+
   const user = candidate.user;
 
   if (user && typeof user === 'object') {
-    const typedUser = user as { name?: unknown };
+    const typedUser = user as { name?: unknown; email?: unknown };
     if (typeof typedUser.name === 'string' && typedUser.name.trim()) {
       return typedUser.name.trim();
+    }
+    if (typeof typedUser.email === 'string' && typedUser.email.trim()) {
+      const email = typedUser.email.trim();
+      const [localPart] = email.split('@');
+      return localPart || email;
     }
   }
 
@@ -85,7 +95,11 @@ const getChefDisplayName = (chef: Chef | null | undefined): string => {
     return candidate.name.trim();
   }
 
-  return '';
+  if (typeof candidate.specialty === 'string' && candidate.specialty.trim()) {
+    return `Chef ${candidate.specialty.trim()}`;
+  }
+
+  return 'Chef Anonyme';
 };
 
 const isChefPubliclyActive = (chef: Chef | null | undefined): boolean => {
@@ -296,15 +310,9 @@ const FindChefPage: React.FC = () => {
 
       console.log('[FindChefPage] Unique chefs after identifier deduplication:', uniqueChefs);
 
-      const visibleChefs = uniqueChefs.filter((chef) => {
-        const displayName = getChefDisplayName(chef);
-        if (!displayName) {
-          return false;
-        }
-        return isChefPubliclyActive(chef);
-      });
+      const visibleChefs = uniqueChefs.filter((chef) => isChefPubliclyActive(chef));
 
-      console.log('[FindChefPage] Visible chefs after activity/name check:', visibleChefs);
+      console.log('[FindChefPage] Visible chefs after activity check:', visibleChefs);
 
       setChefs(visibleChefs);
       setPagination(pagination);

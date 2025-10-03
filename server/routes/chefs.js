@@ -122,6 +122,32 @@ const normalizeProfileImagePath = (inputPath) => {
   return trimmedPath.replace(/^chef-images\//, '');
 };
 
+const toIdString = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === 'string' || typeof value === 'number') {
+    return value.toString();
+  }
+
+  if (typeof value === 'object') {
+    if (typeof value.id === 'string' || typeof value.id === 'number') {
+      return value.id.toString();
+    }
+
+    if (typeof value._id === 'string' || typeof value._id === 'number') {
+      return value._id.toString();
+    }
+
+    if (typeof value.toString === 'function') {
+      return value.toString();
+    }
+  }
+
+  return null;
+};
+
 const removeExistingProfileImage = async (urlPath) => {
   if (!urlPath || urlPath.includes('default-profile')) {
     return;
@@ -512,6 +538,19 @@ const buildPublicChefResponse = (chef) => {
 
   const plainChef = typeof chef.toJSON === 'function' ? chef.toJSON() : chef;
 
+  const verificationStatus = typeof plainChef.verification?.status === 'string'
+    ? plainChef.verification.status
+    : (typeof plainChef.status === 'string'
+      ? plainChef.status
+      : (plainChef.isActive === false ? 'suspended' : 'pending'));
+
+  const verification = {
+    status: verificationStatus,
+    verifiedAt: toISOStringSafe(plainChef.verification?.verifiedAt),
+    verifiedBy: toIdString(plainChef.verification?.verifiedBy),
+    rejectionReason: plainChef.verification?.rejectionReason || null
+  };
+
   const publicChef = {
     id: plainChef.id || plainChef._id?.toString() || null,
     user: plainChef.user || null,
@@ -524,6 +563,9 @@ const buildPublicChefResponse = (chef) => {
     serviceTypes: Array.isArray(plainChef.serviceTypes) ? plainChef.serviceTypes : [],
     serviceAreas: Array.isArray(plainChef.serviceAreas) ? plainChef.serviceAreas : [],
     rating: plainChef.rating || { average: 0, count: 0 },
+    verification,
+    isActive: plainChef.isActive !== false,
+    featured: Boolean(plainChef.featured),
     portfolio: {
       images: plainChef.portfolio?.images || [],
       videos: plainChef.portfolio?.videos || [],
