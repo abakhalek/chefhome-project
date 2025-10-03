@@ -25,6 +25,107 @@ const getMenuIdentifier = (menu: Menu): string => {
   return candidate.id || candidate._id || '';
 };
 
+const getChefIdentifier = (chef: Chef | null | undefined): string => {
+  if (!chef) {
+    return '';
+  }
+
+  const candidate = chef as unknown as {
+    id?: string;
+    _id?: string;
+    user?: string | { id?: string; _id?: string; email?: string };
+  };
+
+  if (typeof candidate.id === 'string' && candidate.id.trim()) {
+    return candidate.id.trim();
+  }
+
+  if (typeof candidate._id === 'string' && candidate._id.trim()) {
+    return candidate._id.trim();
+  }
+
+  const user = candidate.user;
+
+  if (typeof user === 'string' && user.trim()) {
+    return user.trim();
+  }
+
+  if (user && typeof user === 'object') {
+    const typedUser = user as { id?: string; _id?: string; email?: string };
+    if (typeof typedUser.id === 'string' && typedUser.id.trim()) {
+      return typedUser.id.trim();
+    }
+    if (typeof typedUser._id === 'string' && typedUser._id.trim()) {
+      return typedUser._id.trim();
+    }
+    if (typeof typedUser.email === 'string' && typedUser.email.trim()) {
+      return typedUser.email.trim();
+    }
+  }
+
+  return '';
+};
+
+const getChefDisplayName = (chef: Chef | null | undefined): string => {
+  if (!chef) {
+    return '';
+  }
+
+  const candidate = chef as unknown as { user?: unknown; name?: unknown };
+  const user = candidate.user;
+
+  if (user && typeof user === 'object') {
+    const typedUser = user as { name?: unknown };
+    if (typeof typedUser.name === 'string' && typedUser.name.trim()) {
+      return typedUser.name.trim();
+    }
+  }
+
+  if (typeof candidate.name === 'string' && candidate.name.trim()) {
+    return candidate.name.trim();
+  }
+
+  return '';
+};
+
+const isChefPubliclyActive = (chef: Chef | null | undefined): boolean => {
+  if (!chef) {
+    return false;
+  }
+
+  const candidate = chef as unknown as { isActive?: boolean; status?: string; verification?: { status?: string } };
+  const activeFlag = candidate.isActive !== false;
+  const status = candidate.verification?.status ?? candidate.status;
+
+  if (!status) {
+    return activeFlag;
+  }
+
+  return activeFlag && ['approved', 'active', 'verified'].includes(status);
+};
+
+const getChefProfileImage = (chef: Chef | null | undefined): string => {
+  if (!chef) {
+    return '/chef-images/default-profile.png';
+  }
+
+  const candidate = chef as unknown as { profilePicture?: unknown; user?: unknown };
+
+  if (typeof candidate.profilePicture === 'string' && candidate.profilePicture.trim()) {
+    return candidate.profilePicture;
+  }
+
+  const user = candidate.user;
+  if (user && typeof user === 'object') {
+    const avatar = (user as { avatar?: unknown }).avatar;
+    if (typeof avatar === 'string' && avatar.trim()) {
+      return avatar;
+    }
+  }
+
+  return '/chef-images/default-profile.png';
+};
+
 const BookingPaymentForm: React.FC<{
   clientSecret: string;
   bookingId: string;
@@ -182,14 +283,30 @@ const FindChefPage: React.FC = () => {
         rating: minRating || undefined
       };
       const { chefs: fetchedChefs, pagination } = await chefService.getChefs(params);
-      console.log('[FindChefPage] Fetched chefs:', fetchedChefs);
-      const uniqueChefs = fetchedChefs.filter((chef, index, self) =>
-        chef.user && chef.user.id && index === self.findIndex((c) => c.user && c.user.id === chef.user.id)
-      );
-      console.log('[FindChefPage] Unique chefs after deduplication:', uniqueChefs);
-      const validChefs = uniqueChefs.filter(chef => chef.user && chef.user.name);
-      console.log('[FindChefPage] Valid chefs after name check:', validChefs);
-      setChefs(validChefs);
+      const source: Chef[] = Array.isArray(fetchedChefs) ? (fetchedChefs as Chef[]) : [];
+      console.log('[FindChefPage] Fetched chefs:', source);
+
+      const uniqueChefs = source.filter((chef, index, self) => {
+        const identifier = getChefIdentifier(chef);
+        if (!identifier) {
+          return false;
+        }
+        return index === self.findIndex((other) => getChefIdentifier(other) === identifier);
+      });
+
+      console.log('[FindChefPage] Unique chefs after identifier deduplication:', uniqueChefs);
+
+      const visibleChefs = uniqueChefs.filter((chef) => {
+        const displayName = getChefDisplayName(chef);
+        if (!displayName) {
+          return false;
+        }
+        return isChefPubliclyActive(chef);
+      });
+
+      console.log('[FindChefPage] Visible chefs after activity/name check:', visibleChefs);
+
+      setChefs(visibleChefs);
       setPagination(pagination);
     } catch (error) {
       console.error('Failed to fetch chefs:', error);
@@ -248,7 +365,8 @@ const FindChefPage: React.FC = () => {
     const resolvedMenuId = resolvedMenu ? getMenuIdentifier(resolvedMenu) : '';
     setSelectedMenuId(resolvedMenuId);
 
-    setBookingServiceType((chef.serviceTypes && chef.serviceTypes[0]) || 'home-dining');
+    const chefServiceTypes = Array.isArray(chef.serviceTypes) ? chef.serviceTypes : [];
+    setBookingServiceType((chefServiceTypes[0] as BookingServiceType) || 'home-dining');
     setBookingDetails({
       date: '',
       time: '',
@@ -298,9 +416,10 @@ const FindChefPage: React.FC = () => {
 
     try {
       const normalizedSelectedMenuId = selectedMenuId?.trim() || undefined;
+      const chefIdentifier = getChefIdentifier(selectedChef) || selectedChef._id || selectedChef.id;
 
       const payload = {
-        chefId: selectedChef._id || selectedChef.id,
+        chefId: chefIdentifier,
         serviceType: bookingServiceType,
         eventDetails: {
           date: bookingDetails.date,
@@ -498,61 +617,80 @@ const FindChefPage: React.FC = () => {
           <div className="text-center py-12">Aucun chef trouvé avec ces critères.</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {chefs.map((chef) => {
-              const profileImage = chef.profilePicture || chef.user?.avatar || '/chef-images/default-profile.png';
+            {chefs.map((chef, index) => {
+              const chefId = getChefIdentifier(chef) || `${index}`;
+              const chefName = getChefDisplayName(chef) || 'Chef Anonyme';
+              const profileImage = getChefProfileImage(chef);
+              const cuisineList = Array.isArray(chef.cuisineTypes) ? chef.cuisineTypes : [];
+              const serviceList = Array.isArray(chef.serviceTypes) ? chef.serviceTypes : [];
+              const primaryCity = (() => {
+                const areas = Array.isArray(chef.serviceAreas) ? chef.serviceAreas : [];
+                const cityName = areas.length > 0 && typeof areas[0]?.city === 'string' ? areas[0].city : undefined;
+                return cityName && cityName.trim() ? cityName : 'Toute France';
+              })();
+              const menus = Array.isArray(chef.portfolio?.menus) ? chef.portfolio.menus : [];
+              const experienceValue = typeof chef.experience === 'number' ? chef.experience : Number(chef.experience ?? 0) || 0;
+              const hourlyRateValue = typeof chef.hourlyRate === 'number' ? chef.hourlyRate : Number(chef.hourlyRate ?? 0) || 0;
+              const ratingAverage = typeof chef.rating?.average === 'number' ? chef.rating.average : 0;
+              const ratingCount = typeof chef.rating?.count === 'number' ? chef.rating.count : 0;
+              const ratingLabel = ratingCount > 0 ? ratingAverage.toFixed(1) : 'N/A';
 
               return (
-                <div key={chef._id || chef.id} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
+                <div key={chefId} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
                   <img
                     src={profileImage}
-                    alt={chef.user?.name || 'Photo du chef'}
+                    alt={chefName}
                     className="w-full h-48 object-cover"
                   />
                   <div className="p-6 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
-                        <h2 className="text-2xl font-bold text-gray-800">{formatChefName(chef.user?.name)}</h2>
-                        {chef.isActive && <span className="ml-2 w-3 h-3 bg-green-500 rounded-full"></span>}
+                        <h2 className="text-2xl font-bold text-gray-800">{formatChefName(chefName)}</h2>
+                        {chef.isActive !== false && <span className="ml-2 w-3 h-3 bg-green-500 rounded-full"></span>}
                       </div>
                       <span className="inline-flex items-center text-sm text-gray-500">
                         <MapPin className="h-4 w-4 mr-1" />
-                        {chef.serviceAreas?.[0]?.city || 'Toute France'}
+                        {primaryCity}
                       </span>
                     </div>
                     <div className="text-sm text-gray-600 space-y-2">
-                      <p><span className="font-semibold">Spécialité:</span> {chef.specialty}</p>
-                      <p><span className="font-semibold">Expérience:</span> {chef.experience} ans</p>
-                      <p><span className="font-semibold">Taux horaire:</span> {formatCurrency(chef.hourlyRate)}</p>
-                      <p><span className="font-semibold">Cuisines:</span> {chef.cuisineTypes.join(', ')}</p>
-                      <p><span className="font-semibold">Services:</span> {chef.serviceTypes.join(', ')}</p>
+                      <p><span className="font-semibold">Spécialité:</span> {chef.specialty || 'Non renseignée'}</p>
+                      <p><span className="font-semibold">Expérience:</span> {experienceValue ? `${experienceValue} ans` : 'Non renseignée'}</p>
+                      <p><span className="font-semibold">Taux horaire:</span> {hourlyRateValue ? formatCurrency(hourlyRateValue) : 'Non renseigné'}</p>
+                      <p><span className="font-semibold">Cuisines:</span> {cuisineList.length ? cuisineList.join(', ') : 'Non renseignées'}</p>
+                      <p><span className="font-semibold">Services:</span> {serviceList.length ? serviceList.join(', ') : 'Non renseignés'}</p>
                     </div>
                     <div className="flex items-center space-x-2 text-sm text-gray-600">
                       <Star className="h-5 w-5 text-yellow-400 fill-current" />
-                      <span>{chef.rating?.average?.toFixed(1) || 'N/A'} ({chef.rating?.count || 0} avis)</span>
+                      <span>{ratingLabel} ({ratingCount} avis)</span>
                     </div>
-                    <p className="text-gray-700 text-sm line-clamp-3">{chef.description}</p>
+                    <p className="text-gray-700 text-sm line-clamp-3">{chef.description || 'Pas encore de description.'}</p>
                     <div className="pt-4 border-t border-gray-100">
                       <h3 className="text-lg font-semibold text-gray-800 mb-2">Offres du Chef</h3>
-                      {chef.portfolio?.menus && chef.portfolio.menus.length > 0 ? (
+                      {menus.length > 0 ? (
                         <div className="space-y-4">
-                          {chef.portfolio.menus.slice(0, 2).map((menu) => (
-                            <div key={menu.id || menu.name} className="p-3 bg-gray-50 rounded-lg">
-                              <h4 className="font-semibold">{menu.name}</h4>
-                              <p className="text-sm text-gray-600">{menu.description}</p>
-                              <div className="flex justify-between items-center mt-2">
-                                <span className="font-bold text-lg text-emerald-600">{formatCurrency(menu.price)}</span>
-                                <button
-                                  onClick={() => handleBookChef(chef, menu.id)}
-                                  className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition duration-300"
-                                >
-                                  Réserver ce menu
-                                </button>
+                          {menus.slice(0, 2).map((menu) => {
+                            const menuId = getMenuIdentifier(menu);
+                            const menuPriceValue = typeof menu.price === 'number' ? menu.price : Number(menu.price ?? 0);
+                            return (
+                              <div key={menuId || menu.name} className="p-3 bg-gray-50 rounded-lg">
+                                <h4 className="font-semibold">{menu.name}</h4>
+                                <p className="text-sm text-gray-600">{menu.description}</p>
+                                <div className="flex justify-between items-center mt-2">
+                                  <span className="font-bold text-lg text-emerald-600">{formatCurrency(menuPriceValue > 0 ? menuPriceValue : 0)}</span>
+                                  <button
+                                    onClick={() => handleBookChef(chef, menuId)}
+                                    className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded-lg text-sm transition duration-300"
+                                  >
+                                    Réserver ce menu
+                                  </button>
+                                </div>
                               </div>
-                            </div>
-                          ))}
-                          {chef.portfolio.menus.length > 2 && (
+                            );
+                          })}
+                          {menus.length > 2 && (
                             <button
-                              onClick={() => navigate(`/chefs/${chef.id}/menus`)}
+                              onClick={() => navigate(`/chefs/${chefId}/menus`)}
                               className="text-sm font-semibold text-green-600 hover:text-green-700 transition-colors w-full text-center mt-2"
                             >
                               Voir plus d'offres
@@ -595,7 +733,7 @@ const FindChefPage: React.FC = () => {
             <div className="bg-white rounded-2xl shadow-2xl w-full sm:max-w-3xl max-h-[90vh] overflow-y-auto">
               <div className="flex justify-between items-center p-4 md:p-6 border-b">
                 <div>
-                  <h2 className="text-xl md:text-2xl font-bold text-gray-900">Réserver {selectedChef.user?.name}</h2>
+                  <h2 className="text-xl md:text-2xl font-bold text-gray-900">Réserver {formatChefName(getChefDisplayName(selectedChef))}</h2>
                   <p className="text-sm text-gray-500">Sélectionnez votre prestation et confirmez votre acompte sécurisé.</p>
                 </div>
                 <button onClick={handleCloseModal} className="text-gray-500 hover:text-gray-700"><XCircle size={24} /></button>
