@@ -55,9 +55,18 @@ const io = initializeSocket(server);
 app.use(compression());
 
 // CORS configuration
+// CORS configuration
 app.use(cors({
-  origin: ['http://chefathome-app.fr:5173', 'http://localhost:5173'],
-  credentials: true
+  origin: [
+    'http://chefathome-app.fr',
+    'https://chefathome-app.fr',
+    'http://www.chefathome-app.fr',
+    'https://www.chefathome-app.fr',
+    'http://localhost:5173'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
 // Rate limiting (relaxed for local development to avoid accidental lockouts)
@@ -96,7 +105,12 @@ app.use(session({
   secret: process.env.SESSION_SECRET || 'supersecret',
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: process.env.NODE_ENV === 'production' }
+  cookie: { 
+    secure: true, // ← Changez à true pour HTTPS
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000,
+    sameSite: 'lax'
+  }
 }));
 
 // Passport middleware
