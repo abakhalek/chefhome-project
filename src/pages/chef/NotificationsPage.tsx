@@ -1,45 +1,53 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { chefService } from '../../services/chefService';
+import { Bell, CheckCircle } from 'lucide-react';
+import { clientService, ClientNotification } from '../../services/clientService';
 import { useAuth } from '../../hooks/useAuth';
-import { Notification } from '../../types';
-import { Bell, CheckCircle, XCircle } from 'lucide-react';
 
 const NotificationsPage: React.FC = () => {
   const { user } = useAuth();
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<ClientNotification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchNotifications = useCallback(async () => {
-    if (!user?.chefId) return;
+    if (!user) {
+      return;
+    }
     setLoading(true);
+    setError(null);
     try {
-      const response = await chefService.getChefNotifications(user.chefId);
-      setNotifications(response.data || []);
-    } catch (error) {
-      console.error("Failed to fetch notifications:", error);
+      const notificationsData = await clientService.getNotifications();
+      setNotifications(notificationsData);
+    } catch (unknownError) {
+      console.error('Failed to fetch notifications:', unknownError);
+      setError('Impossible de récupérer vos notifications pour le moment.');
     } finally {
       setLoading(false);
     }
-  }, [user?.chefId]);
+  }, [user]);
 
   useEffect(() => {
     fetchNotifications();
   }, [fetchNotifications]);
 
   const markAsRead = async (notificationId: string) => {
-    if (!user?.chefId) return;
+    if (!user) {
+      return;
+    }
     try {
-      await chefService.markChefNotificationAsRead(user.chefId, notificationId);
-      setNotifications(prev => prev.map(notif => notif.id === notificationId ? { ...notif, read: true } : notif));
-    } catch (error) {
-      console.error('Failed to mark notification as read:', error);
+      await clientService.markNotificationAsRead(notificationId);
+      setNotifications(prev => prev.map((notif) => notif.id === notificationId ? { ...notif, read: true } : notif));
+    } catch (unknownError) {
+      console.error('Failed to mark notification as read:', unknownError);
     }
   };
 
-  const deleteNotification = (id: string) => {
-    setNotifications(prev => prev.filter(notif => notif.id !== id));
-    // In a real app, you would call an API to delete
+  const priorityClasses: Record<NonNullable<ClientNotification['priority']>, string> = {
+    low: 'bg-gray-100 text-gray-600',
+    medium: 'bg-blue-100 text-blue-700',
+    high: 'bg-amber-100 text-amber-700',
+    urgent: 'bg-red-100 text-red-700'
   };
 
   return (
@@ -48,29 +56,58 @@ const NotificationsPage: React.FC = () => {
       <div className="bg-white rounded-2xl shadow-lg p-6">
         {loading ? (
           <p>Chargement des notifications...</p>
+        ) : error ? (
+          <p className="text-red-600">{error}</p>
         ) : notifications.length === 0 ? (
           <p>Vous n'avez aucune notification.</p>
         ) : (
           <div className="space-y-4">
             {notifications.map((notif) => (
-              <div key={notif.id} className={`flex items-center justify-between p-4 rounded-lg ${notif.read ? 'bg-gray-50' : 'bg-blue-50 border border-blue-200'}`}>
-                <div className="flex items-center space-x-3">
-                  <Bell size={20} className={notif.read ? 'text-gray-400' : 'text-blue-600'} />
+              <div
+                key={notif.id}
+                className={`flex items-start justify-between p-4 rounded-lg border ${notif.read ? 'bg-gray-50 border-gray-100' : 'bg-blue-50 border-blue-200'}`}
+              >
+                <div className="flex items-start space-x-3">
+                  <Bell size={20} className={notif.read ? 'text-gray-400 mt-1' : 'text-blue-600 mt-1'} />
                   <div>
-                    <p className={`font-medium ${notif.read ? 'text-gray-700' : 'text-gray-900'}`}>{notif.message}</p>
-                    <p className="text-sm text-gray-500">{new Date(notif.createdAt).toLocaleString('fr-FR')}</p>
+                    <div className="flex items-center gap-2">
+                      <p className={`font-semibold ${notif.read ? 'text-gray-700' : 'text-gray-900'}`}>{notif.title || 'Notification'}</p>
+                      {notif.priority && (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${priorityClasses[notif.priority]}`}>
+                          {notif.priority === 'high' ? 'Priorité haute' : notif.priority === 'urgent' ? 'Urgent' : `Priorité ${notif.priority}`}
+                        </span>
+                      )}
+                      {notif.type && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                          {notif.type.replace(/_/g, ' ')}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1">{notif.message}</p>
+                    <p className="text-xs text-gray-500 mt-2">{new Date(notif.createdAt).toLocaleString('fr-FR')}</p>
+                    {notif.actionUrl && (
+                      <a
+                        href={notif.actionUrl}
+                        className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
+                      >
+                        Voir la demande
+                      </a>
+                    )}
                   </div>
                 </div>
                 <div className="flex space-x-2">
                   {!notif.read && (
-                                      <button onClick={() => markAsRead(notif.id)} className="text-green-600 hover:text-green-800">
-                                        <CheckCircle size={20} />
-                                      </button>
-                                    )}
-                                    {/* <button onClick={() => deleteNotification(notif.id)} className="text-red-600 hover:text-red-800">
-                                      <XCircle size={20} />
-                                    </button> */}
-                                  </div>              </div>
+                    <button
+                      type="button"
+                      onClick={() => markAsRead(notif.id)}
+                      className="text-emerald-600 hover:text-emerald-700"
+                      title="Marquer comme lue"
+                    >
+                      <CheckCircle size={20} />
+                    </button>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
         )}

@@ -49,6 +49,10 @@ export interface ClientNotification {
   message: string;
   read: boolean;
   createdAt: string;
+  type?: string;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  actionUrl?: string;
+  data?: Record<string, unknown>;
 }
 
 export interface ClientPaymentIntent {
@@ -173,7 +177,15 @@ const mapNotificationFromApi = (notification: unknown): ClientNotification => {
     read: Boolean(notificationObj.read),
     createdAt: typeof notificationObj.createdAt === 'string'
       ? new Date(notificationObj.createdAt).toISOString()
-      : new Date().toISOString()
+      : new Date().toISOString(),
+    type: typeof notificationObj.type === 'string' ? notificationObj.type : undefined,
+    priority: ['low', 'medium', 'high', 'urgent'].includes(notificationObj.priority as string)
+      ? notificationObj.priority as ClientNotification['priority']
+      : undefined,
+    actionUrl: typeof notificationObj.actionUrl === 'string' ? notificationObj.actionUrl : undefined,
+    data: typeof notificationObj.data === 'object' && notificationObj.data !== null
+      ? notificationObj.data as Record<string, unknown>
+      : undefined
   };
 };
 

@@ -4,6 +4,7 @@ import { body, validationResult } from 'express-validator';
 import { protect, authorize } from '../middleware/auth.js';
 import Booking from '../models/Booking.js';
 import Chef from '../models/Chef.js';
+import { sendNotification } from '../utils/notificationService.js';
 
 const router = express.Router();
 
@@ -37,6 +38,23 @@ router.post('/', protect, authorize('client'), [
         errors: errors.array()
       });
     }
+
+    await sendNotification({
+      io,
+      recipient: req.user.id,
+      sender: req.user.id,
+      type: 'booking_created',
+      title: 'Demande de réservation envoyée',
+      message: `Votre demande a été transmise à ${chef.user?.name || 'votre chef'}.`,
+      data: {
+        bookingId: booking._id.toString(),
+        serviceType,
+        eventDate: eventDetails?.date || null,
+        isB2B: Boolean(booking.isB2B)
+      },
+      actionUrl: '/client-dashboard/bookings',
+      priority: 'medium'
+    });
 
     const { chefId, serviceType, eventDetails, location, menu = {}, specialRequests } = req.body;
 
@@ -204,6 +222,27 @@ router.post('/', protect, authorize('client'), [
     // Send notification to chef
     const io = req.app.get('io');
     if (chef.user && chef.user._id) {
+      const bookingDateISO = eventDate instanceof Date && !Number.isNaN(eventDate.getTime())
+        ? eventDate.toISOString()
+        : (eventDetails?.date || null);
+
+      await sendNotification({
+        io,
+        recipient: chef.user._id,
+        sender: req.user.id,
+        type: 'booking_created',
+        title: 'Nouvelle demande de réservation',
+        message: `${req.user.name} a demandé une réservation pour le ${eventDetails?.date || ''}`.trim(),
+        data: {
+          bookingId: booking._id.toString(),
+          serviceType,
+          eventDate: bookingDateISO,
+          isB2B: Boolean(booking.isB2B)
+        },
+        actionUrl: '/chef-dashboard/bookings',
+        priority: 'high'
+      });
+
       io.to(`user-${chef.user._id}`).emit('booking-notification', {
         type: 'new_booking',
         bookingId: booking._id,
@@ -421,6 +460,64 @@ router.put('/:id/status', protect, async (req, res) => {
     const notificationTarget = isChef ? booking.client._id : chefUserId;
 
     if (notificationTarget) {
+      const statusMeta = {
+        confirmed: { type: 'booking_confirmed', title: 'Réservation confirmée', priority: 'high' },
+        cancelled: { type: 'booking_cancelled', title: 'Réservation annulée', priority: 'high' },
+        completed: { type: 'booking_status_updated', title: 'Réservation terminée', priority: 'medium' },
+        in_progress: { type: 'booking_status_updated', title: 'Réservation en cours', priority: 'medium' },
+        pending: { type: 'booking_status_updated', title: 'Réservation en attente', priority: 'medium' },
+        disputed: { type: 'booking_status_updated', title: 'Réservation en litige', priority: 'urgent' }
+      }[status] || { type: 'booking_status_updated', title: 'Mise à jour de réservation', priority: 'medium' };
+
+      const clientName = booking.client?.name || 'votre client';
+      const chefName = booking.chef?.user?.name || 'votre chef';
+      const statusMessages = {
+        confirmed: {
+          client: `Votre réservation avec ${chefName} est confirmée.`,
+          chef: `La réservation de ${clientName} est confirmée.`
+        },
+        cancelled: {
+          client: `Votre réservation avec ${chefName} a été annulée.`,
+          chef: `La réservation de ${clientName} a été annulée.`
+        },
+        completed: {
+          client: `Votre réservation avec ${chefName} est terminée.`,
+          chef: `La réservation de ${clientName} est terminée.`
+        },
+        in_progress: {
+          client: `Votre réservation avec ${chefName} est en cours.`,
+          chef: `La réservation de ${clientName} est en cours.`
+        },
+        pending: {
+          client: `Votre réservation avec ${chefName} est en attente de confirmation.`,
+          chef: `La réservation de ${clientName} est en attente.`
+        },
+        disputed: {
+          client: `Votre réservation avec ${chefName} est en litige.`,
+          chef: `La réservation de ${clientName} est en litige.`
+        }
+      };
+      const statusMessage = statusMessages[status] || {
+        client: `Votre réservation avec ${chefName} a été mise à jour (${status}).`,
+        chef: `La réservation de ${clientName} a été mise à jour (${status}).`
+      };
+
+      await sendNotification({
+        io,
+        recipient: notificationTarget,
+        sender: req.user.id,
+        type: statusMeta.type,
+        title: statusMeta.title,
+        message: isChef ? statusMessage.client : statusMessage.chef,
+        data: {
+          bookingId: booking._id.toString(),
+          status,
+          isB2B: Boolean(booking.isB2B)
+        },
+        actionUrl: isChef ? '/client-dashboard/bookings' : '/chef-dashboard/bookings',
+        priority: statusMeta.priority
+      });
+
       io.to(`user-${notificationTarget}`).emit('booking-notification', {
         type: 'status_update',
         bookingId: booking._id,

@@ -4,6 +4,7 @@ import { protect } from '../middleware/auth.js';
 import Message from '../models/Message.js';
 import Conversation from '../models/Conversation.js';
 import User from '../models/User.js';
+import { sendNotification } from '../utils/notificationService.js';
 
 const router = express.Router();
 
@@ -154,6 +155,22 @@ router.post('/', protect, [
         name: req.user.name,
         avatar: req.user.avatar
       }
+    });
+
+    await sendNotification({
+      io,
+      recipient: recipientId,
+      sender: req.user.id,
+      type: 'message_received',
+      title: 'Nouveau message',
+      message: `${req.user.name} vous a envoyé un message.`,
+      data: {
+        conversationId: conversation._id.toString(),
+        messageId: message._id.toString(),
+        bookingId: bookingId || null
+      },
+      actionUrl: `/messages/${conversation._id.toString()}`,
+      priority: 'medium'
     });
 
     res.status(201).json({

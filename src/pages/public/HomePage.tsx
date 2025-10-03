@@ -51,6 +51,42 @@ const HomePage: React.FC = () => {
         </div>
       </section>
 
+      {/* Download Apps Section */}
+      <section className="py-12 md:py-16 bg-gray-100">
+        <div className="container mx-auto px-6 text-center">
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-800 mb-4">Téléchargez l'application Chef at Home</h2>
+          <p className="text-base md:text-lg text-gray-600 max-w-3xl mx-auto mb-10">
+            Emportez Chef at Home partout avec vous. Réservez, discutez avec les chefs et suivez vos événements en temps réel sur Android et iOS.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
+            <a
+              href="/app/chefathome-andriod.apk"
+              download
+              className="flex flex-col items-center justify-between rounded-2xl bg-white p-8 shadow-lg border border-gray-200 hover:border-orange-500 hover:shadow-xl transition"
+            >
+              <div className="space-y-3">
+                <span className="inline-flex items-center rounded-full bg-green-100 px-4 py-1 text-sm font-semibold text-green-700">Android</span>
+                <h3 className="text-2xl font-bold text-gray-800">Télécharger l'APK</h3>
+                <p className="text-gray-600">Installez la dernière version Android et découvrez vos chefs préférés où que vous soyez.</p>
+              </div>
+              <span className="mt-8 inline-flex items-center text-orange-500 font-semibold">Télécharger maintenant →</span>
+            </a>
+            <a
+              href="/app/chefathome-ios.ipa"
+              download
+              className="flex flex-col items-center justify-between rounded-2xl bg-white p-8 shadow-lg border border-gray-200 hover:border-orange-500 hover:shadow-xl transition"
+            >
+              <div className="space-y-3">
+                <span className="inline-flex items-center rounded-full bg-blue-100 px-4 py-1 text-sm font-semibold text-blue-700">iOS</span>
+                <h3 className="text-2xl font-bold text-gray-800">Télécharger l'IPA</h3>
+                <p className="text-gray-600">Obtenez l'application sur iPhone et iPad pour gérer vos réservations en quelques gestes.</p>
+              </div>
+              <span className="mt-8 inline-flex items-center text-orange-500 font-semibold">Télécharger maintenant →</span>
+            </a>
+          </div>
+        </div>
+      </section>
+
       {/* How It Works Section */}
       <section className="py-12 md:py-16 bg-gray-100">
         <div className="container mx-auto px-6 text-center">

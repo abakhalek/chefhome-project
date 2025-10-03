@@ -13,6 +13,7 @@ import LoginPage from './pages/public/LoginPage';
 import RegisterPage from './pages/public/RegisterPage';
 import FindChefPage from './pages/public/FindChefPage';
 import HowItWorksPage from './pages/public/HowItWorksPage';
+import LogicielPage from './pages/public/LogicielPage';
 import AboutPage from './pages/public/AboutPage';
 import ContactPage from './pages/public/ContactPage';
 import FaqPage from './pages/public/FaqPage';
@@ -74,6 +75,7 @@ function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/chefs" element={<FindChefPage />} />
         <Route path="/how-it-works" element={<HowItWorksPage />} />
+        <Route path="/logiciel" element={<LogicielPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
         <Route path="/faq" element={<FaqPage />} />

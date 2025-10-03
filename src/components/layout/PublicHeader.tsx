@@ -30,6 +30,7 @@ const PublicHeader: React.FC = () => {
           <Link to="/" className="text-gray-600 hover:text-orange-500 transition-colors font-medium">Accueil</Link>
           <Link to="/chefs" className="text-gray-600 hover:text-orange-500 transition-colors font-medium">Trouver un Chef</Link>
           <Link to="/how-it-works" className="text-gray-600 hover:text-orange-500 transition-colors font-medium">Comment ça marche</Link>
+          <Link to="/logiciel" className="text-gray-600 hover:text-orange-500 transition-colors font-medium">Logiciel</Link>
           <Link to="/about" className="text-gray-600 hover:text-orange-500 transition-colors font-medium">À propos</Link>
           <Link to="/contact" className="text-gray-600 hover:text-orange-500 transition-colors font-medium">Contact</Link>
           <Link to="/faq" className="text-gray-600 hover:text-orange-500 transition-colors font-medium">FAQ</Link>
@@ -85,6 +86,7 @@ const PublicHeader: React.FC = () => {
             <Link to="/" className="text-gray-600 hover:text-orange-500">Accueil</Link>
             <Link to="/chefs" className="text-gray-600 hover:text-orange-500">Trouver un Chef</Link>
             <Link to="/how-it-works" className="text-gray-600 hover:text-orange-500">Comment ça marche</Link>
+            <Link to="/logiciel" className="text-gray-600 hover:text-orange-500">Logiciel</Link>
             <Link to="/about" className="text-gray-600 hover:text-orange-500">À propos</Link>
             <Link to="/contact" className="text-gray-600 hover:text-orange-500">Contact</Link>
             <Link to="/faq" className="text-gray-600 hover:text-orange-500">FAQ</Link>

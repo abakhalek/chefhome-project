@@ -4,6 +4,7 @@ import { protect, authorize } from '../middleware/auth.js';
 import Booking from '../models/Booking.js';
 import Chef from '../models/Chef.js';
 import User from '../models/User.js';
+import { sendNotification } from '../utils/notificationService.js';
 
 const router = express.Router();
 
@@ -123,6 +124,23 @@ router.post('/missions', [
         }),
         type: 'system'
       }]
+    });
+
+    const io = req.app.get('io');
+    await sendNotification({
+      io,
+      recipient: req.user.id,
+      sender: req.user.id,
+      type: 'mission_created',
+      title: 'Mission B2B créée',
+      message: `Votre mission "${title}" a été créée.`,
+      data: {
+        missionId: mission._id.toString(),
+        serviceType,
+        budget
+      },
+      actionUrl: '/b2b-dashboard/missions',
+      priority: 'medium'
     });
 
     res.status(201).json({
@@ -292,6 +310,36 @@ router.put('/missions/:id/assign', async (req, res) => {
 
     // Notify chef
     const io = req.app.get('io');
+    const missionDetailsEntry = Array.isArray(mission.communication)
+      ? mission.communication.find((entry) => entry?.type === 'system')
+      : null;
+    let missionDetails = {};
+    if (missionDetailsEntry && missionDetailsEntry.message) {
+      try {
+        missionDetails = JSON.parse(missionDetailsEntry.message);
+      } catch (_error) {
+        missionDetails = {};
+      }
+    }
+    const missionTitle = missionDetails.title || 'Mission B2B';
+
+    await sendNotification({
+      io,
+      recipient: chef.user._id,
+      sender: req.user.id,
+      type: 'mission_assigned',
+      title: 'Nouvelle mission B2B',
+      message: `Vous avez été assigné à la mission "${missionTitle}" de ${req.user.company?.name || 'un client B2B'}.`,
+      data: {
+        missionId: mission._id.toString(),
+        serviceType: mission.serviceType,
+        eventDate: mission.eventDetails?.date || null,
+        company: req.user.company?.name || null
+      },
+      actionUrl: '/chef-dashboard/planning',
+      priority: 'high'
+    });
+
     io.to(`user-${chef.user._id}`).emit('b2b-assignment', {
       missionId: mission._id,
       company: req.user.company?.name,

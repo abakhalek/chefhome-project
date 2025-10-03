@@ -17,6 +17,7 @@ const notificationSchema = new mongoose.Schema({
       'booking_created',
       'booking_confirmed',
       'booking_cancelled',
+      'booking_status_updated',
       'booking_reminder',
       'chef_approved',
       'chef_rejected',
@@ -25,6 +26,9 @@ const notificationSchema = new mongoose.Schema({
       'dispute_created',
       'dispute_resolved',
       'message_received',
+      'mission_created',
+      'mission_assigned',
+      'mission_updated',
       'system_announcement'
     ],
     required: true

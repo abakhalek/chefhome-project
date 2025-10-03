@@ -312,6 +312,83 @@ export interface Notification {
   updatedAt: string;
 }
 
+export interface ChefBookingInvoice {
+  number: string;
+  issuedAt: string | null;
+  dueDate: string | null;
+  paidAt: string | null;
+  status: 'paid' | 'pending' | 'overdue';
+  totalAmount: number;
+  earnings: number;
+  commission: number;
+}
+
+export interface ChefEarningsBooking {
+  id: string;
+  status: Booking['status'];
+  paymentStatus: Booking['payment']['status'];
+  serviceType: Booking['serviceType'];
+  isB2B: boolean;
+  client: {
+    name: string;
+    email: string | null;
+    company?: string | null;
+  };
+  eventDate: string | null;
+  createdAt: string | null;
+  totalAmount: number;
+  earnings: number;
+  commission: number;
+  invoice: ChefBookingInvoice | null;
+}
+
+export interface ChefInvoiceSummary extends ChefBookingInvoice {
+  bookingId: string;
+  clientName: string;
+  company?: string | null;
+}
+
+export interface ChefEarningsDailyEntry {
+  date: string;
+  totalGross: number;
+  totalNet: number;
+  totalCommission: number;
+  bookingCount: number;
+}
+
+export interface ChefEarningsMonthlyEntry {
+  month: string;
+  totalGross: number;
+  totalNet: number;
+  totalCommission: number;
+  bookingCount: number;
+  averageRating: number | null;
+}
+
+export interface ChefEarningsSummary {
+  totalGross: number;
+  totalNet: number;
+  totalCommission: number;
+  totalBookings: number;
+  averageRating: number | null;
+  averagePerMission: number;
+}
+
+export interface ChefEarningsResponse {
+  period: {
+    label: string;
+    start: string | null;
+    end: string | null;
+  };
+  summary: ChefEarningsSummary;
+  timeline: {
+    daily: ChefEarningsDailyEntry[];
+    monthly: ChefEarningsMonthlyEntry[];
+  };
+  bookings: ChefEarningsBooking[];
+  invoices: ChefInvoiceSummary[];
+}
+
 // API Response Types
 export interface ApiResponse<T = unknown> {
   success: boolean;
@@ -335,6 +412,10 @@ export interface SearchFilters {
   location?: string;
   cuisineType?: string;
   serviceType?: string;
+  status?: string;
+  period?: string;
+  startDate?: string;
+  endDate?: string;
   minPrice?: number;
   maxPrice?: number;
   rating?: number;

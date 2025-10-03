@@ -3,6 +3,8 @@ import Stripe from 'stripe';
 import { protect } from '../middleware/auth.js';
 import Booking from '../models/Booking.js';
 import User from '../models/User.js';
+import Chef from '../models/Chef.js';
+import { sendNotification } from '../utils/notificationService.js';
 
 const router = express.Router();
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -132,12 +134,56 @@ router.post('/confirm', protect, async (req, res) => {
 
       await booking.save();
 
+      await booking.populate([
+        { path: 'client', select: 'name' },
+        { path: 'chef', populate: { path: 'user', select: 'name' } }
+      ]);
+
       const io = req.app.get('io');
-      io.to(`user-${booking.chef}`).emit('booking-notification', {
-        type: 'booking_confirmed',
-        bookingId: booking._id,
-        message: 'New booking confirmed with deposit payment'
-      });
+      const chefUserId = booking.chef?.user?._id || booking.chef?.user;
+      const clientUserId = booking.client?._id;
+
+      if (chefUserId) {
+        await sendNotification({
+          io,
+          recipient: chefUserId,
+          sender: req.user.id,
+          type: 'payment_received',
+          title: 'Acompte reçu',
+          message: `Un acompte a été reçu pour la réservation de ${booking.client?.name || 'votre client'}.`,
+          data: {
+            bookingId: booking._id.toString(),
+            status: booking.status,
+            paymentStatus: booking.payment.status
+          },
+          actionUrl: '/chef-dashboard/bookings',
+          priority: 'high'
+        });
+
+        io.to(`user-${chefUserId}`).emit('booking-notification', {
+          type: 'booking_confirmed',
+          bookingId: booking._id,
+          message: 'New booking confirmed with deposit payment'
+        });
+      }
+
+      if (clientUserId) {
+        await sendNotification({
+          io,
+          recipient: clientUserId,
+          sender: req.user.id,
+          type: 'payment_received',
+          title: 'Paiement confirmé',
+          message: 'Votre acompte a été reçu et la réservation est confirmée.',
+          data: {
+            bookingId: booking._id.toString(),
+            status: booking.status,
+            paymentStatus: booking.payment.status
+          },
+          actionUrl: '/client-dashboard/bookings',
+          priority: 'high'
+        });
+      }
     }
 
     res.json({

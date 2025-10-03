@@ -1,6 +1,6 @@
 import { apiClient } from './apiClient';
 import { API_CONFIG } from '../utils/constants';
-import { Chef, SearchFilters, ApiResponse, Review, Booking, Menu, Notification, DashboardStats } from '../types';
+import { Chef, SearchFilters, ApiResponse, Review, Booking, Menu, DashboardStats, ChefEarningsResponse } from '../types';
 
 const API_SERVER_BASE = API_CONFIG.BASE_URL.replace(/\/api\/?$/, '');
 
@@ -285,16 +285,6 @@ export const chefService = {
     return response.data;
   },
 
-  async getChefNotifications(chefId: string): Promise<ApiResponse<Notification[]>> {
-    const response = await apiClient.get(`/chefs/${chefId}/notifications`);
-    return response.data;
-  },
-
-  async markChefNotificationAsRead(chefId: string, notificationId: string): Promise<ApiResponse<unknown>> {
-    const response = await apiClient.put(`/chefs/${chefId}/notifications/${notificationId}/read`);
-    return response.data;
-  },
-
   async updateBookingStatus(bookingId: string, status: string): Promise<ApiResponse<Booking>> {
     const response = await apiClient.put(`/bookings/${bookingId}/status`, { status });
     return response.data;
@@ -305,9 +295,9 @@ export const chefService = {
     return response.data;
   },
 
-  async getChefEarnings(chefId: string, filters: SearchFilters): Promise<ApiResponse<unknown>> {
+  async getChefEarnings(chefId: string, filters: SearchFilters): Promise<ChefEarningsResponse> {
     const response = await apiClient.get(`/chefs/${chefId}/earnings`, { params: filters });
-    return response.data;
+    return response.data.earnings;
   },
 
   async requestPayout(chefId: string, amount: number): Promise<ApiResponse<unknown>> {

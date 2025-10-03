@@ -148,6 +148,278 @@ const removeExistingProfileImage = async (urlPath) => {
   }
 };
 
+const buildEarningsDateFilter = ({ period, startDate, endDate }) => {
+  const filter = {};
+
+  if (startDate) {
+    const parsedStart = new Date(startDate);
+    if (!Number.isNaN(parsedStart.getTime())) {
+      filter.$gte = parsedStart;
+    }
+  }
+
+  if (endDate) {
+    const parsedEnd = new Date(endDate);
+    if (!Number.isNaN(parsedEnd.getTime())) {
+      filter.$lte = parsedEnd;
+    }
+  }
+
+  if (filter.$gte || filter.$lte) {
+    if (!filter.$lte) {
+      filter.$lte = new Date();
+    }
+    return filter;
+  }
+
+  if (!period || period === 'all') {
+    return {};
+  }
+
+  const now = new Date();
+  let start = null;
+
+  switch (period) {
+    case '7d': {
+      start = new Date();
+      start.setDate(now.getDate() - 7);
+      break;
+    }
+    case '30d': {
+      start = new Date();
+      start.setDate(now.getDate() - 30);
+      break;
+    }
+    case '90d': {
+      start = new Date();
+      start.setDate(now.getDate() - 90);
+      break;
+    }
+    case '1y': {
+      start = new Date();
+      start.setFullYear(now.getFullYear() - 1);
+      break;
+    }
+    default:
+      break;
+  }
+
+  if (start) {
+    return { $gte: start, $lte: now };
+  }
+
+  return {};
+};
+
+const toISOStringSafe = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+};
+
+const resolveInvoiceStatus = (invoice) => {
+  if (!invoice) {
+    return 'pending';
+  }
+
+  if (invoice.paidAt) {
+    return 'paid';
+  }
+
+  if (invoice.dueDate) {
+    const due = new Date(invoice.dueDate);
+    if (!Number.isNaN(due.getTime()) && due < new Date()) {
+      return 'overdue';
+    }
+  }
+
+  return 'pending';
+};
+
+const pickQueryString = (value) => {
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+
+  return typeof value === 'string' ? value : undefined;
+};
+
+const computeChefEarnings = async (chef, options = {}) => {
+  const { period = '30d', startDate, endDate } = options;
+  const dateFilter = buildEarningsDateFilter({ period, startDate, endDate });
+
+  const baseMatch = { chef: chef._id, status: 'completed' };
+  const matchWithDate = Object.keys(dateFilter).length ? { ...baseMatch, createdAt: dateFilter } : { ...baseMatch };
+
+  const [dailyAgg, summaryAgg, monthlyAgg, bookingsDocs] = await Promise.all([
+    Booking.aggregate([
+      { $match: matchWithDate },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          totalGross: { $sum: { $ifNull: ['$pricing.basePrice', 0] } },
+          totalCommission: { $sum: { $ifNull: ['$pricing.serviceFee', 0] } },
+          totalNet: {
+            $sum: {
+              $subtract: [
+                { $ifNull: ['$pricing.basePrice', 0] },
+                { $ifNull: ['$pricing.serviceFee', 0] }
+              ]
+            }
+          },
+          bookingCount: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]),
+    Booking.aggregate([
+      { $match: matchWithDate },
+      {
+        $group: {
+          _id: null,
+          totalGross: { $sum: { $ifNull: ['$pricing.basePrice', 0] } },
+          totalCommission: { $sum: { $ifNull: ['$pricing.serviceFee', 0] } },
+          totalNet: {
+            $sum: {
+              $subtract: [
+                { $ifNull: ['$pricing.basePrice', 0] },
+                { $ifNull: ['$pricing.serviceFee', 0] }
+              ]
+            }
+          },
+          totalBookings: { $sum: 1 },
+          averageRating: { $avg: '$review.clientReview.rating' }
+        }
+      }
+    ]),
+    Booking.aggregate([
+      { $match: matchWithDate },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m", date: "$createdAt" } },
+          totalGross: { $sum: { $ifNull: ['$pricing.basePrice', 0] } },
+          totalCommission: { $sum: { $ifNull: ['$pricing.serviceFee', 0] } },
+          totalNet: {
+            $sum: {
+              $subtract: [
+                { $ifNull: ['$pricing.basePrice', 0] },
+                { $ifNull: ['$pricing.serviceFee', 0] }
+              ]
+            }
+          },
+          bookingCount: { $sum: 1 },
+          averageRating: { $avg: '$review.clientReview.rating' }
+        }
+      },
+      { $sort: { _id: -1 } },
+      { $limit: 6 }
+    ]),
+    Booking.find(matchWithDate)
+      .populate('client', 'name email phone company')
+      .sort({ createdAt: -1 })
+      .lean()
+  ]);
+
+  const summaryDoc = summaryAgg[0] || {};
+  const totalGross = Number(summaryDoc.totalGross || 0);
+  const totalCommission = Number(summaryDoc.totalCommission || 0);
+  const totalNet = Number(summaryDoc.totalNet || (totalGross - totalCommission));
+  const totalBookings = Number(summaryDoc.totalBookings || 0);
+  const averagePerMission = totalBookings > 0 ? totalNet / totalBookings : 0;
+
+  const summary = {
+    totalGross,
+    totalNet,
+    totalCommission,
+    totalBookings,
+    averageRating: summaryDoc.averageRating ? Number(summaryDoc.averageRating.toFixed(2)) : null,
+    averagePerMission
+  };
+
+  const timeline = {
+    daily: dailyAgg.map((entry) => ({
+      date: entry._id,
+      totalGross: Number(entry.totalGross || 0),
+      totalNet: Number(entry.totalNet || 0),
+      totalCommission: Number(entry.totalCommission || 0),
+      bookingCount: Number(entry.bookingCount || 0)
+    })),
+    monthly: monthlyAgg.map((entry) => ({
+      month: entry._id,
+      totalGross: Number(entry.totalGross || 0),
+      totalNet: Number(entry.totalNet || 0),
+      totalCommission: Number(entry.totalCommission || 0),
+      bookingCount: Number(entry.bookingCount || 0),
+      averageRating: entry.averageRating ? Number(entry.averageRating.toFixed(2)) : null
+    }))
+  };
+
+  const bookings = bookingsDocs.map((doc) => {
+    const invoice = doc.invoice && doc.invoice.number
+      ? {
+          number: doc.invoice.number,
+          issuedAt: toISOStringSafe(doc.invoice.issuedAt),
+          dueDate: toISOStringSafe(doc.invoice.dueDate),
+          paidAt: toISOStringSafe(doc.invoice.paidAt),
+          status: resolveInvoiceStatus(doc.invoice),
+          totalAmount: Number(doc.pricing?.totalAmount || 0),
+          earnings: Number(doc.pricing?.basePrice || 0),
+          commission: Number(doc.pricing?.serviceFee || 0)
+        }
+      : null;
+
+    return {
+      id: doc._id.toString(),
+      status: doc.status,
+      paymentStatus: doc.payment?.status || 'pending',
+      serviceType: doc.serviceType,
+      isB2B: Boolean(doc.isB2B),
+      client: {
+        name: doc.client?.name || doc.company?.contactPerson || 'Client',
+        email: doc.client?.email || null,
+        company: doc.isB2B ? (doc.company?.name || null) : null
+      },
+      eventDate: toISOStringSafe(doc.eventDetails?.date),
+      createdAt: toISOStringSafe(doc.createdAt),
+      totalAmount: Number(doc.pricing?.totalAmount || 0),
+      earnings: Number(doc.pricing?.basePrice || 0),
+      commission: Number(doc.pricing?.serviceFee || 0),
+      invoice
+    };
+  });
+
+  const invoices = bookings
+    .filter((booking) => booking.invoice)
+    .map((booking) => ({
+      bookingId: booking.id,
+      number: booking.invoice?.number || '',
+      issuedAt: booking.invoice?.issuedAt || null,
+      dueDate: booking.invoice?.dueDate || null,
+      paidAt: booking.invoice?.paidAt || null,
+      status: booking.invoice?.status || 'pending',
+      totalAmount: booking.invoice?.totalAmount ?? booking.totalAmount,
+      earnings: booking.invoice?.earnings ?? booking.earnings,
+      commission: booking.invoice?.commission ?? booking.commission,
+      clientName: booking.client.name,
+      company: booking.client.company
+    }));
+
+  return {
+    period: {
+      label: period,
+      start: toISOStringSafe(dateFilter.$gte),
+      end: toISOStringSafe(dateFilter.$lte)
+    },
+    summary,
+    timeline,
+    bookings,
+    invoices
+  };
+};
+
 // Multer for local image storage
 const imageStorage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -1124,8 +1396,10 @@ router.put('/me/availability', protect, authorize('chef'), async (req, res) => {
 // @access  Private (Chef)
 router.get('/me/earnings', protect, authorize('chef'), async (req, res) => {
   try {
-    const { period = '30d' } = req.query;
-    
+    const period = pickQueryString(req.query.period) || '30d';
+    const startDate = pickQueryString(req.query.startDate);
+    const endDate = pickQueryString(req.query.endDate);
+
     const chef = await Chef.findOne({ user: req.user.id });
     if (!chef) {
       return res.status(404).json({
@@ -1134,93 +1408,44 @@ router.get('/me/earnings', protect, authorize('chef'), async (req, res) => {
       });
     }
 
-    let dateFilter = {};
-    const now = new Date();
-    
-    switch (period) {
-      case '7d':
-        dateFilter = { $gte: new Date(now.setDate(now.getDate() - 7)) };
-        break;
-      case '30d':
-        dateFilter = { $gte: new Date(now.setDate(now.getDate() - 30)) };
-        break;
-      case '90d':
-        dateFilter = { $gte: new Date(now.setDate(now.getDate() - 90)) };
-        break;
-      case '1y':
-        dateFilter = { $gte: new Date(now.setFullYear(now.getFullYear() - 1)) };
-        break;
-    }
-
-    const [earnings, totalStats, monthlyBreakdown] = await Promise.all([
-      // Daily earnings
-      Booking.aggregate([
-        {
-          $match: {
-            chef: chef._id,
-            status: 'completed',
-            createdAt: dateFilter
-          }
-        },
-        {
-          $group: {
-            _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
-            totalEarnings: { $sum: "$pricing.basePrice" },
-            commission: { $sum: "$pricing.serviceFee" },
-            bookingCount: { $sum: 1 }
-          }
-        },
-        { $sort: { _id: 1 } }
-      ]),
-
-      // Total stats
-      Booking.aggregate([
-        {
-          $match: {
-            chef: chef._id,
-            status: 'completed',
-            createdAt: dateFilter
-          }
-        },
-        {
-          $group: {
-            _id: null,
-            totalEarnings: { $sum: "$pricing.basePrice" },
-            totalCommission: { $sum: "$pricing.serviceFee" },
-            totalBookings: { $sum: 1 },
-            averageRating: { $avg: "$review.clientReview.rating" }
-          }
-        }
-      ]),
-
-      // Monthly breakdown
-      Booking.aggregate([
-        {
-          $match: {
-            chef: chef._id,
-            status: 'completed'
-          }
-        },
-        {
-          $group: {
-            _id: { $dateToString: { format: "%Y-%m", date: "$createdAt" } },
-            earnings: { $sum: "$pricing.basePrice" },
-            missions: { $sum: 1 },
-            avgRating: { $avg: "$review.clientReview.rating" }
-          }
-        },
-        { $sort: { _id: -1 } },
-        { $limit: 6 }
-      ])
-    ]);
+    const earnings = await computeChefEarnings(chef, { period, startDate, endDate });
 
     res.json({
       success: true,
-      earnings: {
-        daily: earnings,
-        total: totalStats[0] || { totalEarnings: 0, totalCommission: 0, totalBookings: 0, averageRating: 0 },
-        monthly: monthlyBreakdown
-      }
+      earnings
+    });
+
+  } catch (error) {
+    console.error('Get earnings error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching earnings'
+    });
+  }
+});
+
+// @desc    Get chef earnings and statistics by user id
+// @route   GET /api/chefs/:id/earnings
+// @access  Private (Chef/Admin)
+router.get('/:id/earnings', protect, canAccessChefData, async (req, res) => {
+  try {
+    const period = pickQueryString(req.query.period) || '30d';
+    const startDate = pickQueryString(req.query.startDate);
+    const endDate = pickQueryString(req.query.endDate);
+
+    const chef = await Chef.findOne({ user: req.params.id });
+    if (!chef) {
+      return res.status(404).json({
+        success: false,
+        message: 'Chef profile not found'
+      });
+    }
+
+    const earnings = await computeChefEarnings(chef, { period, startDate, endDate });
+
+    res.json({
+      success: true,
+      earnings
     });
 
   } catch (error) {
