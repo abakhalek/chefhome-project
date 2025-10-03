@@ -11,19 +11,19 @@ export default defineConfig(({ mode }) => {
       __APP_ENV__: env.APP_ENV,
     },
     server: {
-      host: '0.0.0.0',
+      host: '0.0.0.0', // Permet l'accès depuis l'extérieur
       port: 5173,
       open: false,
-      // Ajoutez cette section pour autoriser le host
       allowedHosts: [
-        'chefathome-app.fr', // Autorise le domaine principal
-        'www.chefathome-app.fr', // Autorise la version www
+        'chefathome-app.fr',
+        'www.chefathome-app.fr',
       ],
+      // Proxy config pour le développement
       proxy: {
         '/api': {
-          target: env.VITE_API_URL || 'https://chefathome-app.fr/api',
+          target: 'http://localhost:5000',
           changeOrigin: true,
-          rewrite: (path) => path.replace(/^\/api/, ''),
+          secure: false,
         },
       },
     },
@@ -31,10 +31,6 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@': path.resolve(__dirname, './src'),
       },
-    },
-    build: {
-      outDir: 'dist',
-      sourcemap: true,
     },
   };
 });

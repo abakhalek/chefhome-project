@@ -55,25 +55,10 @@ const io = initializeSocket(server);
 app.use(compression());
 
 // CORS configuration
-const corsOptions = {
-  origin: function (origin, callback) {
-    const allowedOrigins = [
-      'https://chefathome-app.fr',
-      'https://www.chefathome-app.fr',
-      'http://localhost:5173' // pour le développement
-    ];
-    
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  optionsSuccessStatus: 200
-};
-
-app.use(cors(corsOptions));
+app.use(cors({
+  origin: ['http://chefathome-app.fr:5173', 'http://localhost:5173'],
+  credentials: true
+}));
 
 // Rate limiting (relaxed for local development to avoid accidental lockouts)
 const limiter = rateLimit({
