@@ -217,6 +217,61 @@ const chefProfilesByEmail = {
   'chef.pending@chefathome.fr': seedPendingChefProfile
 };
 
+const removeDuplicateChefProfiles = async () => {
+  try {
+    const duplicates = await Chef.aggregate([
+      {
+        $group: {
+          _id: '$user',
+          ids: { $push: '$_id' },
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $match: {
+          count: { $gt: 1 }
+        }
+      }
+    ]);
+
+    if (!duplicates.length) {
+      return;
+    }
+
+    for (const entry of duplicates) {
+      const chefIds = entry?.ids || [];
+      if (!Array.isArray(chefIds) || chefIds.length < 2) {
+        continue;
+      }
+
+      const chefs = await Chef.find({ _id: { $in: chefIds } })
+        .sort({
+          isActive: -1,
+          'verification.status': 1,
+          updatedAt: -1
+        });
+
+      if (!chefs.length) {
+        continue;
+      }
+
+      const preferredChef = chefs.find((chef) => chef.isActive && chef.verification?.status === 'approved') || chefs[0];
+      const idsToRemove = chefs
+        .filter((chef) => !chef._id.equals(preferredChef._id))
+        .map((chef) => chef._id);
+
+      if (!idsToRemove.length) {
+        continue;
+      }
+
+      await Chef.deleteMany({ _id: { $in: idsToRemove } });
+      console.log(`🧹 Removed ${idsToRemove.length} duplicate chef profile(s) for user ${preferredChef.user}`);
+    }
+  } catch (error) {
+    console.error('❌ Error while removing duplicate chef profiles:', error);
+  }
+};
+
 export const seedBookingsData = [
   {
     clientEmail: "client@chefathome.fr",
@@ -290,14 +345,17 @@ export const seedBookingsData = [
 export const createSeedUsers = async () => {
   try {
     console.log('🌱 Starting user seeding...');
-    
+
     // Clear existing seed users
     await User.deleteMany({ 
       email: { 
         $in: seedUsers.map(user => user.email) 
       } 
     });
-    
+
+    // Ensure the collection does not contain duplicate chef profiles before seeding
+    await removeDuplicateChefProfiles();
+
     // Clear existing seed bookings
     await Booking.deleteMany({ 
       'client': { $in: (await User.find({ email: { $in: seedBookingsData.map(b => b.clientEmail) } })).map(u => u._id) },

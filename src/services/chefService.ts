@@ -15,6 +15,160 @@ const toAbsoluteUrl = (path?: string | null): string | null => {
   return `${API_SERVER_BASE}${normalisedPath}`;
 };
 
+const mapMenuCourse = (course: unknown, index: number) => {
+  if (course && typeof course === 'object') {
+    const asObject = course as { name?: unknown; description?: unknown; order?: unknown };
+    const name = typeof asObject.name === 'string' && asObject.name.trim()
+      ? asObject.name.trim()
+      : typeof course === 'string'
+        ? course
+        : `Plat ${index + 1}`;
+    return {
+      name,
+      description: typeof asObject.description === 'string' ? asObject.description : '',
+      order: typeof asObject.order === 'number' ? asObject.order : index + 1,
+    };
+  }
+
+  if (typeof course === 'string' && course.trim()) {
+    return {
+      name: course.trim(),
+      description: '',
+      order: index + 1,
+    };
+  }
+
+  return {
+    name: `Plat ${index + 1}`,
+    description: '',
+    order: index + 1,
+  };
+};
+
+const mapMenuFromApi = (rawMenu: unknown): Menu => {
+  const menu = (rawMenu ?? {}) as Record<string, unknown>;
+
+  const toNumber = (value: unknown): number => {
+    const parsed = typeof value === 'string' ? Number.parseFloat(value) : Number(value);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  };
+
+  const toGuestNumber = (value: unknown, fallback: number): number => {
+    const parsed = typeof value === 'string' ? Number.parseInt(value, 10) : Number(value);
+    return Number.isNaN(parsed) ? fallback : parsed;
+  };
+
+  const courses = Array.isArray(menu.courses)
+    ? (menu.courses as unknown[]).map((course, index) => mapMenuCourse(course, index))
+    : [];
+
+  const normaliseStringArray = (value: unknown): string[] =>
+    Array.isArray(value)
+      ? value
+          .map((item) => (typeof item === 'string' ? item.trim() : ''))
+          .filter(Boolean)
+      : [];
+
+  return {
+    id: typeof menu.id === 'string' && menu.id ? menu.id : (typeof menu._id === 'string' ? menu._id : ''),
+    chef: typeof menu.chef === 'string' ? menu.chef : undefined,
+    name: typeof menu.name === 'string' ? menu.name : '',
+    description: typeof menu.description === 'string' ? menu.description : '',
+    category: typeof menu.category === 'string' ? menu.category : 'Gastronomique',
+    type: menu.type === 'horaire' ? 'horaire' : 'forfait',
+    price: toNumber(menu.price ?? 0),
+    duration: typeof menu.duration === 'string' ? menu.duration : '',
+    minGuests: toGuestNumber(menu.minGuests, 1),
+    maxGuests: toGuestNumber(menu.maxGuests, toGuestNumber(menu.minGuests, 1)),
+    courses,
+    ingredients: normaliseStringArray(menu.ingredients),
+    allergens: normaliseStringArray(menu.allergens),
+    dietaryOptions: normaliseStringArray(menu.dietaryOptions),
+    image: toAbsoluteUrl(typeof menu.image === 'string' ? menu.image : null),
+    images: Array.isArray(menu.images)
+      ? (menu.images as unknown[])
+          .map((img) => toAbsoluteUrl(typeof img === 'string' ? img : null))
+          .filter((img): img is string => Boolean(img))
+      : [],
+    isActive: menu.isActive !== false,
+    bookingCount: typeof menu.bookingCount === 'number' ? menu.bookingCount : undefined,
+    averageRating: typeof menu.averageRating === 'number' ? menu.averageRating : undefined,
+    tags: normaliseStringArray(menu.tags),
+    createdAt: typeof menu.createdAt === 'string' ? menu.createdAt : undefined,
+    updatedAt: typeof menu.updatedAt === 'string' ? menu.updatedAt : undefined,
+  };
+};
+
+const buildMenuPayload = (menu: Partial<ChefMenuFormData>): Record<string, unknown> => {
+  const payload: Record<string, unknown> = {};
+
+  if (menu.name !== undefined) payload.name = menu.name;
+  if (menu.description !== undefined) payload.description = menu.description;
+  if (menu.price !== undefined) payload.price = Number(menu.price);
+  if (menu.type) payload.type = menu.type;
+  if (menu.category !== undefined) payload.category = menu.category;
+  if (menu.duration !== undefined) payload.duration = menu.duration;
+  if (menu.minGuests !== undefined) payload.minGuests = Number(menu.minGuests);
+  if (menu.maxGuests !== undefined) payload.maxGuests = Number(menu.maxGuests);
+  if (menu.isActive !== undefined) payload.isActive = menu.isActive;
+
+  const toCleanArray = (value: unknown): string[] | undefined => {
+    if (!Array.isArray(value)) {
+      return undefined;
+    }
+    const cleaned = value
+      .map((item) => (typeof item === 'string' ? item.trim() : ''))
+      .filter(Boolean);
+    return cleaned.length ? cleaned : [];
+  };
+
+  const courseObjects = Array.isArray(menu.courses)
+    ? menu.courses
+        .map((course, index) => {
+          if (typeof course !== 'string' || !course.trim()) {
+            return null;
+          }
+          return {
+            name: course.trim(),
+            order: index + 1,
+          };
+        })
+        .filter((course): course is { name: string; order: number } => Boolean(course))
+    : undefined;
+
+  if (courseObjects) payload.courses = courseObjects;
+
+  const ingredients = toCleanArray(menu.ingredients);
+  if (ingredients) payload.ingredients = ingredients;
+
+  const dietaryOptions = toCleanArray(menu.dietaryOptions);
+  if (dietaryOptions) payload.dietaryOptions = dietaryOptions;
+
+  const allergens = toCleanArray(menu.allergens);
+  if (allergens) payload.allergens = allergens;
+
+  return payload;
+};
+
+export interface ChefMenuFormData {
+  name: string;
+  description: string;
+  price: number;
+  type: 'forfait' | 'horaire';
+  category: string;
+  courses: string[];
+  ingredients: string[];
+  dietaryOptions: string[];
+  allergens: string[];
+  duration: string;
+  minGuests: number;
+  maxGuests: number;
+  isActive: boolean;
+  image?: string;
+}
+
+export type ChefMenu = Menu;
+
 const normaliseDateString = (value?: string | Date | null): string | null => {
   if (!value) {
     return null;
@@ -263,6 +417,63 @@ export const chefService = {
   async getChefMenus(chefId: string): Promise<{ success: boolean; chef: Partial<Chef>; menus: Menu[] }> {
     const response = await apiClient.get(`/chefs/${chefId}/menus`);
     return response.data;
+  },
+
+  async getMyMenus(): Promise<Menu[]> {
+    const response = await apiClient.get('/chefs/me/menus');
+    const menus = Array.isArray(response.data?.menus) ? response.data.menus : [];
+    return menus.map(mapMenuFromApi);
+  },
+
+  async getMenus(): Promise<Menu[]> {
+    return this.getMyMenus();
+  },
+
+  async createMyMenu(menuData: ChefMenuFormData): Promise<Menu> {
+    const payload = buildMenuPayload(menuData);
+    const response = await apiClient.post('/chefs/me/menus', payload);
+    return mapMenuFromApi(response.data?.menu);
+  },
+
+  async createMenu(menuData: Partial<ChefMenuFormData>): Promise<Menu> {
+    const payload = buildMenuPayload(menuData);
+    const response = await apiClient.post('/chefs/me/menus', payload);
+    return mapMenuFromApi(response.data?.menu);
+  },
+
+  async updateMyMenu(menuId: string, menuData: Partial<ChefMenuFormData>): Promise<Menu> {
+    const payload = buildMenuPayload(menuData);
+    const response = await apiClient.put(`/chefs/me/menus/${menuId}`, payload);
+    return mapMenuFromApi(response.data?.menu);
+  },
+
+  async updateMenu(menuId: string, menuData: Partial<ChefMenuFormData>): Promise<Menu> {
+    return this.updateMyMenu(menuId, menuData);
+  },
+
+  async deleteMyMenu(menuId: string): Promise<void> {
+    await apiClient.delete(`/chefs/me/menus/${menuId}`);
+  },
+
+  async deleteMenu(menuId: string): Promise<void> {
+    await this.deleteMyMenu(menuId);
+  },
+
+  async uploadMyMenuImage(menuId: string, file: File): Promise<{ url: string | null }> {
+    const formData = new FormData();
+    formData.append('image', file);
+    const response = await apiClient.post(`/chefs/me/menus/${menuId}/image`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return {
+      url: toAbsoluteUrl(response.data?.url ?? null),
+    };
+  },
+
+  async uploadMenuImage(menuId: string, file: File): Promise<{ url: string | null }> {
+    return this.uploadMyMenuImage(menuId, file);
   },
 
   async getChefMenu(chefId: string, menuId: string): Promise<ApiResponse<Menu>> {

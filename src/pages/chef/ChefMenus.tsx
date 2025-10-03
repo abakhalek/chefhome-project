@@ -2,39 +2,33 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { chefService } from '../../services/chefService';
 import { Menu } from '../../types';
-import { useAuth } from '../../hooks/useAuth';
 import { Plus, Edit, Trash2, Camera } from 'lucide-react';
-import { API_CONFIG } from '../../utils/constants';
 
 const ChefMenus: React.FC = () => {
-  const { user } = useAuth();
   const [menus, setMenus] = useState<Menu[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const serverBaseUrl = API_CONFIG.BASE_URL.replace('/api', '');
-
   const fetchMenus = useCallback(async () => {
-    if (!user?.chefId) return;
     setLoading(true);
     try {
-      const response = await chefService.getChefMenus(user.chefId);
-      setMenus(response.menus || []);
+      const myMenus = await chefService.getMyMenus();
+      setMenus(myMenus);
     } catch (error) { 
       console.error("Failed to fetch menus:", error);
     } finally {
       setLoading(false);
     }
-  }, [user?.chefId]);
+  }, []);
 
   useEffect(() => {
     fetchMenus();
   }, [fetchMenus]);
 
   const handleDelete = async (menuId: string) => {
-    if (!user?.chefId || !confirm('Êtes-vous sûr de vouloir supprimer cette offre ?')) return;
+    if (!menuId || !confirm('Êtes-vous sûr de vouloir supprimer cette offre ?')) return;
     try {
-      await chefService.deleteChefMenu(user.chefId, menuId);
-      fetchMenus(); // Refresh menus list
+      await chefService.deleteMyMenu(menuId);
+      await fetchMenus();
     } catch (error) {
       console.error('Error deleting menu:', error);
     }
@@ -62,11 +56,34 @@ const ChefMenus: React.FC = () => {
 
       {/* Menus Grid */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {menus.map((menu) => (
-          <div key={menu.id} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
+        {menus.length === 0 && !loading && (
+          <div className="col-span-full rounded-2xl border border-dashed border-gray-200 p-8 text-center text-gray-500">
+            Vous n'avez pas encore créé d'offre. Cliquez sur « Nouvelle Offre » pour proposer votre premier menu.
+          </div>
+        )}
+        {menus.map((menu) => {
+          const imageUrl = menu.image || '/chef-images/default-menu.png';
+          const courseList = Array.isArray(menu.courses)
+            ? menu.courses
+                .map((course) => course?.name)
+                .filter((name): name is string => Boolean(name && name.trim()))
+                .join(', ')
+            : '';
+          const ingredientsList = Array.isArray(menu.ingredients) && menu.ingredients.length
+            ? menu.ingredients.join(', ')
+            : '';
+          const allergensList = Array.isArray(menu.allergens) && menu.allergens.length
+            ? menu.allergens.join(', ')
+            : '';
+          const dietaryList = Array.isArray(menu.dietaryOptions) && menu.dietaryOptions.length
+            ? menu.dietaryOptions.join(', ')
+            : '';
+
+          return (
+            <div key={menu.id || menu.name} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow">
             <div className="relative h-48 bg-gray-200">
               {menu.image ? (
-                <img src={`${serverBaseUrl}${menu.image}`} alt={menu.name} className="w-full h-full object-cover" />
+                <img src={imageUrl} alt={menu.name} className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-48 bg-gray-200 flex items-center justify-center"><Camera className="h-12 w-12 text-gray-400" /></div>
               )}
@@ -78,10 +95,10 @@ const ChefMenus: React.FC = () => {
               {/* New Info */}
               <div className="text-sm text-gray-700 space-y-1 mb-4">
                 <p><strong>Catégorie:</strong> {menu.category}</p>
-                {menu.courses && menu.courses.length > 0 && <p><strong>Plats:</strong> {menu.courses.join(', ')}</p>}
-                {menu.ingredients && menu.ingredients.length > 0 && <p><strong>Ingrédients:</strong> {menu.ingredients.join(', ')}</p>}
-                {menu.allergens && menu.allergens.length > 0 && <p><strong>Allergènes:</strong> {menu.allergens.join(', ')}</p>}
-                {menu.dietaryOptions && menu.dietaryOptions.length > 0 && <p><strong>Options Diététiques:</strong> {menu.dietaryOptions.join(', ')}</p>}
+                {courseList && <p><strong>Plats:</strong> {courseList}</p>}
+                {ingredientsList && <p><strong>Ingrédients:</strong> {ingredientsList}</p>}
+                {allergensList && <p><strong>Allergènes:</strong> {allergensList}</p>}
+                {dietaryList && <p><strong>Options Diététiques:</strong> {dietaryList}</p>}
                 {menu.duration && <p><strong>Durée:</strong> {menu.duration}</p>}
                 <p><strong>Invités:</strong> {menu.minGuests} - {menu.maxGuests}</p>
                 {menu.createdAt && <p><strong>Créé le:</strong> {new Date(menu.createdAt).toLocaleDateString()}</p>}
@@ -106,7 +123,8 @@ const ChefMenus: React.FC = () => {
               </div>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
 

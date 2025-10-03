@@ -620,8 +620,15 @@ router.get('/', async (req, res) => {
       sortOrder = 'desc'
     } = req.query;
 
-    // Build query
-    let query = { 'verification.status': 'approved', isActive: true };
+    const parsedPage = Number.parseInt(page, 10);
+    const parsedLimit = Number.parseInt(limit, 10);
+
+    const pageNumber = Number.isNaN(parsedPage) ? 1 : Math.max(1, parsedPage);
+    const limitNumber = Number.isNaN(parsedLimit)
+      ? 12
+      : Math.min(100, Math.max(1, parsedLimit));
+
+    const query = { 'verification.status': 'approved', isActive: true };
 
     // Location filter
     if (city) {
@@ -651,54 +658,72 @@ router.get('/', async (req, res) => {
     }
 
     // Sort options
-    const sortOptions = {};
-    sortOptions[sortBy] = sortOrder === 'desc' ? -1 : 1;
+    const sortByValue = typeof sortBy === 'string' && /^[A-Za-z0-9_.-]+$/.test(sortBy)
+      ? sortBy
+      : 'rating.average';
 
-    const chefsFromDb = await Chef.find(query)
-      .populate('user', 'name email avatar')
-      .select('-documents -bankDetails')
-      .sort(sortOptions)
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
-    console.log('[Backend] Chefs from DB (before deduplication):', chefsFromDb);
+    const sortDirection = sortOrder === 'asc' ? 1 : -1;
+    const sortOptions = { [sortByValue]: sortDirection };
 
-    const seenUserIds = new Set();
-    const uniqueChefs = [];
-
-    for (const chefDoc of chefsFromDb) {
-      const populatedUser = chefDoc?.user;
-      const userId =
-        populatedUser?._id?.toString?.() ??
-        (typeof populatedUser === 'string' || typeof populatedUser === 'number'
-          ? String(populatedUser)
-          : populatedUser?.toString?.());
-
-      if (!userId || seenUserIds.has(userId)) {
-        if (!userId) {
-          console.warn('[Backend] Chef record without resolvable user id, keeping for inspection:', chefDoc?._id);
-          uniqueChefs.push(chefDoc);
+    const pipeline = [
+      { $match: query },
+      { $sort: sortOptions },
+      {
+        $group: {
+          _id: '$user',
+          doc: { $first: '$$ROOT' }
         }
-        continue;
+      },
+      { $replaceRoot: { newRoot: '$doc' } },
+      {
+        $facet: {
+          data: [
+            { $skip: (pageNumber - 1) * limitNumber },
+            { $limit: limitNumber }
+          ],
+          totalCount: [
+            { $count: 'count' }
+          ]
+        }
       }
+    ];
 
-      seenUserIds.add(userId);
-      uniqueChefs.push(chefDoc);
-    }
-    console.log('[Backend] Unique chefs (after deduplication):', uniqueChefs);
+    const aggregateResult = await Chef.aggregate(pipeline);
+    const facetResult = aggregateResult?.[0] || { data: [], totalCount: [] };
 
-    const chefs = uniqueChefs.map(buildPublicChefResponse);
+    const rawChefs = Array.isArray(facetResult.data) ? facetResult.data : [];
+    const total = Array.isArray(facetResult.totalCount) && facetResult.totalCount[0]?.count
+      ? facetResult.totalCount[0].count
+      : 0;
 
-    const totalUniqueChefUsers = await Chef.distinct('user', query);
-    const total = totalUniqueChefUsers.length;
+    const populatedChefs = await Chef.populate(rawChefs, {
+      path: 'user',
+      select: 'name email avatar isActive'
+    });
+
+    const activeChefs = populatedChefs.filter((chefDoc) => {
+      const user = chefDoc?.user;
+      if (!user) {
+        return false;
+      }
+      if (typeof user.isActive === 'boolean' && user.isActive === false) {
+        return false;
+      }
+      return true;
+    });
+
+    const chefs = activeChefs
+      .map(buildPublicChefResponse)
+      .filter((chef) => chef?.isActive && chef?.verification?.status === 'approved');
 
     res.json({
       success: true,
       chefs,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: pageNumber,
+        limit: limitNumber,
         total,
-        pages: Math.ceil(total / limit)
+        pages: limitNumber ? Math.ceil(total / limitNumber) : 0
       }
     });
 

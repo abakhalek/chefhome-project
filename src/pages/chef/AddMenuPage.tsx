@@ -1,13 +1,13 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { chefService, ChefMenu } from '../../services/chefService';
+import { chefService, ChefMenuFormData } from '../../services/chefService';
 import { Save, X, Plus, ArrowLeft } from 'lucide-react';
 
 const AddMenuPage: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState<Partial<ChefMenu>>({
+  const [formData, setFormData] = useState<ChefMenuFormData>({
     name: '',
     description: '',
     price: 0,
@@ -26,7 +26,7 @@ const AddMenuPage: React.FC = () => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
 
-  const handleInputChange = <K extends keyof ChefMenu>(field: K, value: ChefMenu[K]) => {
+  const handleInputChange = <K extends keyof ChefMenuFormData>(field: K, value: ChefMenuFormData[K]) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -46,47 +46,62 @@ const AddMenuPage: React.FC = () => {
     e.preventDefault();
     setLoading(true);
     try {
-      // Create menu first
-      const createdMenu = await chefService.createMenu({ ...formData, image: undefined }); // Create without image initially
-      let imageUrl = createdMenu.image;
+      const sanitizeArray = (values: string[]) =>
+        values
+          .map((item) => item.trim())
+          .filter((item) => item.length > 0);
 
-      if (imageFile && createdMenu._id) {
-        // Upload image using the created menu's ID
-        const uploadResponse = await chefService.uploadMenuImage(createdMenu._id, imageFile);
-        imageUrl = uploadResponse.url;
-        // Update the created menu with the image URL
-        await chefService.updateMenu(createdMenu._id, { image: imageUrl });
+      const payload: ChefMenuFormData = {
+        ...formData,
+        price: Number.isFinite(formData.price) ? formData.price : 0,
+        minGuests: formData.minGuests > 0 ? formData.minGuests : 1,
+        maxGuests: formData.maxGuests >= formData.minGuests ? formData.maxGuests : formData.minGuests,
+        courses: sanitizeArray(formData.courses),
+        ingredients: sanitizeArray(formData.ingredients),
+        dietaryOptions: sanitizeArray(formData.dietaryOptions),
+        allergens: sanitizeArray(formData.allergens),
+      };
+
+      const createdMenu = await chefService.createMyMenu(payload);
+      const menuId = createdMenu.id;
+
+      if (imageFile && menuId) {
+        await chefService.uploadMyMenuImage(menuId, imageFile);
       }
 
       navigate('/chef-dashboard/menus');
     } catch (error) {
       console.error('Error creating menu:', error);
+      alert("Impossible de créer l'offre. Merci de réessayer.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleArrayInput = (field: keyof ChefMenu, value: string) => {
+  const addArrayItem = (field: 'courses' | 'ingredients') => {
     setFormData(prev => {
-      const currentArray = (prev[field] as string[]) || [];
-      return { ...prev, [field]: [...currentArray, value.trim()] };
+      const updated = { ...prev };
+      updated[field] = [...prev[field], ''];
+      return updated;
     });
   };
 
-  const removeArrayItem = (field: keyof ChefMenu, index: number) => {
+  const removeArrayItem = (field: 'courses' | 'ingredients', index: number) => {
     setFormData(prev => {
-      const currentArray = (prev[field] as string[]) || [];
-      return { ...prev, [field]: currentArray.filter((_, i) => i !== index) };
+      const updated = { ...prev };
+      updated[field] = prev[field].filter((_, i) => i !== index);
+      return updated;
     });
   };
 
-  const toggleArrayItem = (field: keyof ChefMenu, item: string) => {
+  const toggleArrayItem = (field: 'dietaryOptions' | 'allergens', item: string) => {
     setFormData(prev => {
-      const currentArray = (prev[field] as string[]) || [];
-      if (currentArray.includes(item)) {
-        return { ...prev, [field]: currentArray.filter(i => i !== item) };
-      }
-      return { ...prev, [field]: [...currentArray, item] };
+      const updated = { ...prev };
+      const list = updated[field];
+      updated[field] = list.includes(item)
+        ? list.filter((entry) => entry !== item)
+        : [...list, item];
+      return updated;
     });
   };
 
@@ -247,13 +262,13 @@ const AddMenuPage: React.FC = () => {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Plats inclus</label>
               <div className="space-y-2">
-                {formData.courses?.map((course, index) => (
+                {formData.courses.map((course, index) => (
                   <div key={index} className="flex items-center space-x-2">
                     <input
                       type="text"
                       value={course}
                       onChange={(e) => {
-                        const newCourses = [...(formData.courses || [])];
+                        const newCourses = [...formData.courses];
                         newCourses[index] = e.target.value;
                         handleInputChange('courses', newCourses);
                       }}
@@ -271,7 +286,7 @@ const AddMenuPage: React.FC = () => {
                 ))}
                 <button
                   type="button"
-                  onClick={() => handleArrayInput('courses', 'Nouveau plat')}
+                  onClick={() => addArrayItem('courses')}
                   className="text-green-600 hover:text-green-700 text-sm font-medium flex items-center space-x-1"
                 >
                   <Plus className="h-4 w-4" />
@@ -283,13 +298,13 @@ const AddMenuPage: React.FC = () => {
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Ingrédients principaux</label>
               <div className="space-y-2">
-                {formData.ingredients?.map((ingredient, index) => (
+                {formData.ingredients.map((ingredient, index) => (
                   <div key={index} className="flex items-center space-x-2">
                     <input
                       type="text"
                       value={ingredient}
                       onChange={(e) => {
-                        const newIngredients = [...(formData.ingredients || [])];
+                        const newIngredients = [...formData.ingredients];
                         newIngredients[index] = e.target.value;
                         handleInputChange('ingredients', newIngredients);
                       }}
@@ -307,7 +322,7 @@ const AddMenuPage: React.FC = () => {
                 ))}
                 <button
                   type="button"
-                  onClick={() => handleArrayInput('ingredients', 'Nouvel ingrédient')}
+                  onClick={() => addArrayItem('ingredients')}
                   className="text-green-600 hover:text-green-700 text-sm font-medium flex items-center space-x-1"
                 >
                   <Plus className="h-4 w-4" />

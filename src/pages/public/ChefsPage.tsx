@@ -1,10 +1,53 @@
 
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { chefService } from '../../services/chefService';
 import { Chef } from '../../types';
 import { useAuth } from '../../hooks/useAuth';
 import { Button } from '../../components/common/Button'; // Assuming you have a Button component
+
+const getChefIdentifier = (chef: Chef | null | undefined): string | null => {
+  if (!chef) {
+    return null;
+  }
+
+  if (chef.id) {
+    return chef.id;
+  }
+
+  if (typeof chef._id === 'string' && chef._id.trim()) {
+    return chef._id.trim();
+  }
+
+  const userId = chef.user?.id;
+  if (typeof userId === 'string' && userId.trim()) {
+    return userId.trim();
+  }
+
+  return null;
+};
+
+const filterVisibleChefs = (chefs: Chef[]): Chef[] => {
+  const seen = new Set<string>();
+
+  return chefs.filter((chef) => {
+    if (!chef?.isActive) {
+      return false;
+    }
+
+    if (chef.verification?.status && chef.verification.status !== 'approved') {
+      return false;
+    }
+
+    const identifier = getChefIdentifier(chef);
+    if (!identifier || seen.has(identifier)) {
+      return false;
+    }
+
+    seen.add(identifier);
+    return true;
+  });
+};
 
 const ChefsPage: React.FC = () => {
   const [chefs, setChefs] = useState<Chef[]>([]);
@@ -18,7 +61,8 @@ const ChefsPage: React.FC = () => {
       try {
         // Assuming getChefs can be called with filters, here none for all approved chefs
         const response = await chefService.getChefs({});
-        setChefs(response.chefs || []);
+        const sourceChefs = Array.isArray(response.chefs) ? response.chefs : [];
+        setChefs(filterVisibleChefs(sourceChefs));
       } catch (error) {
         console.error("Failed to fetch chefs:", error);
       } finally {
