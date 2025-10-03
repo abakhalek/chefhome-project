@@ -597,7 +597,7 @@ const FindChefPage: React.FC = () => {
             <select value={filterServiceType} onChange={(e) => setFilterServiceType(e.target.value)} className="p-3 border rounded-lg">
               <option value="">Type de Prestation</option>
               <option value="home-dining">Repas à domicile</option>
-              <option value="private-events">Événement privé</option>
+              <option value="private-events">Cuisinier hôte (lieu + repas)</option>
               <option value="cooking-classes">Cours de cuisine</option>
               <option value="catering">Traiteur professionnel</option>
             </select>
@@ -760,7 +760,7 @@ const FindChefPage: React.FC = () => {
                     <label className="block text-gray-700 text-sm font-bold mb-2">Type de Prestation</label>
                     <select value={bookingServiceType} onChange={(e) => setBookingServiceType(e.target.value as BookingServiceType)} className="w-full p-3 border rounded-lg">
                       <option value="home-dining">Repas quotidien</option>
-                      <option value="private-events">Événement privé</option>
+                      <option value="private-events">Cuisinier hôte (lieu + repas)</option>
                       <option value="cooking-classes">Cours de cuisine</option>
                       <option value="catering">Mission professionnelle</option>
                     </select>

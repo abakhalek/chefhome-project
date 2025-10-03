@@ -24,7 +24,7 @@ const PersonalInfoPage: React.FC = () => {
 
   const serviceTypeOptions = [
     { value: 'home-dining', label: 'Repas à domicile' },
-    { value: 'private-events', label: 'Événements privés' },
+    { value: 'private-events', label: 'Cuisinier hôte (lieu + repas)' },
     { value: 'cooking-classes', label: 'Cours de cuisine' },
     { value: 'catering', label: 'Traiteur' }
   ];

@@ -21,7 +21,7 @@ const ChefProfile: React.FC = () => {
     
     // Cuisine & Services
     cuisineTypes: ['Française', 'Moderne', 'Fusion'],
-    serviceTypes: ['Repas à domicile', 'Événements privés', 'Cours de cuisine'],
+    serviceTypes: ['Repas à domicile', 'Cuisinier hôte (lieu + repas)', 'Cours de cuisine'],
     dietarySpecializations: ['Végétarien', 'Sans gluten'],
     
     // Service Areas
@@ -60,7 +60,7 @@ const ChefProfile: React.FC = () => {
   ];
 
   const serviceOptions = [
-    'Repas à domicile', 'Événements privés', 'Cours de cuisine', 'Traiteur',
+    'Repas à domicile', 'Cuisinier hôte (lieu + repas)', 'Cours de cuisine', 'Traiteur',
     'Consultation culinaire', 'Préparation de repas'
   ];
 

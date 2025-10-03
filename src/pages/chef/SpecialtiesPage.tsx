@@ -68,7 +68,7 @@ const SpecialtiesPage: React.FC = () => {
   }
 
   const allCuisineTypes = ["Française", "Italienne", "Asiatique", "Indienne", "Mexicaine", "Méditerranéenne", "Végétarienne", "Vegan"];
-  const allServiceTypes = ["Repas à domicile", "Événements privés", "Cours de cuisine", "Traiteur"];
+  const allServiceTypes = ["Repas à domicile", "Cuisinier hôte (lieu + repas)", "Cours de cuisine", "Traiteur"];
 
   return (
     <div className="p-6">
