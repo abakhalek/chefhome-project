@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { clientService, ClientProfile, ClientBooking } from '../../services/clientService';
 import { Link } from 'react-router-dom';
-import { User, ChefHat, XCircle } from 'lucide-react';
+import { User, ChefHat, Home, XCircle } from 'lucide-react';
 
 const ClientDashboard: React.FC = () => {
   const [profile, setProfile] = useState<ClientProfile | null>(null);
@@ -63,7 +63,7 @@ const ClientDashboard: React.FC = () => {
         <div className="lg:col-span-2 bg-white rounded-2xl shadow-lg p-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Bienvenue, {profile.name} !</h2>
           <p className="text-gray-600 mb-4">Gérez vos réservations et découvrez de nouveaux chefs.</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Link to="/chefs" className="bg-orange-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-orange-600 transition-colors flex items-center justify-center space-x-2">
               <ChefHat size={20} />
               <span>Réserver un Chef</span>
@@ -71,6 +71,10 @@ const ClientDashboard: React.FC = () => {
             <Link to="/client-dashboard/profile" className="border border-gray-300 text-gray-700 px-6 py-3 rounded-lg font-semibold hover:bg-gray-50 transition-colors flex items-center justify-center space-x-2">
               <User size={20} />
               <span>Mon Profil</span>
+            </Link>
+            <Link to="/client-dashboard/chef-home" className="border border-orange-200 text-orange-600 px-6 py-3 rounded-lg font-semibold hover:bg-orange-50 transition-colors flex items-center justify-center space-x-2">
+              <Home size={20} />
+              <span>Chef à Domicile</span>
             </Link>
           </div>
         </div>

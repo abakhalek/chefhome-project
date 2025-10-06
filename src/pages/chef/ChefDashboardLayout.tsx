@@ -12,6 +12,7 @@ const ChefDashboardLayout: React.FC = () => {
     { path: '/chef-dashboard/profile/documents', label: 'Mes Documents', icon: FileText },
     { path: '/chef-dashboard/menus', label: 'Mes Offres', icon: ChefHat },
     { path: '/chef-dashboard/planning', label: 'Planning & Missions', icon: Calendar },
+    { path: '/chef-dashboard/home-hosting', label: 'Chef à Domicile', icon: Home },
     { path: '/chef-dashboard/earnings', label: 'Revenus & Factures', icon: Euro },
     { path: '/chef-dashboard/notifications', label: 'Notifications', icon: Bell },
     { path: '/chef-dashboard/messages', label: 'Messages', icon: MessageCircle },
