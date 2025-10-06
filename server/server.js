@@ -37,6 +37,7 @@ import messageRoutes from './routes/messages.js';
 import notificationRoutes from './routes/notifications.js';
 import dashboardRoutes from './routes/dashboard.js';
 import analyticsRoutes from './routes/analytics.js';
+import chefHomeSessionRoutes from './routes/chefHomeSessions.js';
 
 // Import middleware
 import { errorHandler } from './middleware/errorHandler.js';
@@ -161,7 +162,8 @@ app.get('/api', (req, res) => {
       messages: '/api/messages',
       notifications: '/api/notifications',
       dashboard: '/api/dashboard',
-      analytics: '/api/analytics'
+      analytics: '/api/analytics',
+      chefHomeSessions: '/api/chef-home-sessions'
     }
   });
 });
@@ -178,6 +180,7 @@ app.use('/api/messages', messageRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/chef-home-sessions', chefHomeSessionRoutes);
 
 // Error handling middleware
 app.use(notFound);
