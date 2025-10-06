@@ -21,7 +21,7 @@ router.post('/register', [
   body('name').trim().isLength({ min: 2 }).withMessage('Name must be at least 2 characters'),
   body('email').isEmail().normalizeEmail().withMessage('Please enter a valid email'),
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-  body('phone').isMobilePhone().withMessage('Please enter a valid phone number'),
+  body('phone').isString().trim().isLength({ min: 6, max: 20 }).withMessage('Please enter a valid phone number'),
   body('role').isIn(['client', 'chef', 'b2b']).withMessage('Invalid role')
 ], async (req, res) => {
   console.log(`[AUTH] Register attempt for email: ${req.body.email}`);

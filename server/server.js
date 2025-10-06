@@ -107,7 +107,7 @@ app.use(session({
   resave: false,
   saveUninitialized: false,
   cookie: { 
-    secure: true, // ← Changez à true pour HTTPS
+    secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000,
     sameSite: 'lax'
@@ -123,12 +123,14 @@ if (process.env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
 }
 
-// Connect to MongoDB
-connectDB();
+// Connect to MongoDB (skip in tests)
+if (process.env.NODE_ENV !== 'test') {
+  connectDB();
 
-// Conditionally seed users in development
-if (process.env.NODE_ENV === 'development') {
-  createSeedUsers().catch(err => console.error('Error seeding users on startup:', err));
+  // Conditionally seed users in development
+  if (process.env.NODE_ENV === 'development') {
+    createSeedUsers().catch(err => console.error('Error seeding users on startup:', err));
+  }
 }
 
 // Make io accessible to routes
@@ -188,12 +190,16 @@ app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📱 Socket.io server ready for real-time connections`);
-  console.log(`🌐 API Documentation available at http://localhost:${PORT}/api`);
-  console.log(`❤️  Health check available at http://localhost:${PORT}/health`);
-  
-  // Initialize schedulers for automated tasks
-  initializeSchedulers(io);
-});
+if (process.env.NODE_ENV !== 'test') {
+  server.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    console.log(`📱 Socket.io server ready for real-time connections`);
+    console.log(`🌐 API Documentation available at http://localhost:${PORT}/api`);
+    console.log(`❤️  Health check available at http://localhost:${PORT}/health`);
+    
+    // Initialize schedulers for automated tasks
+    initializeSchedulers(io);
+  });
+}
+
+export default app;

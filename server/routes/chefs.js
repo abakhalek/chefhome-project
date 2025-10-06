@@ -758,8 +758,8 @@ router.get('/me/profile', protect, authorize('chef'), async (req, res) => {
     console.log('Chef Profile Picture URL:', chef.profilePicture); // Added log
 
     // Ensure profilePicture is a local path if it's still a Cloudinary URL
-    if (chef.profilePicture && chef.profilePicture.startsWith('https://res.cloudinary.com/your-cloud-name/')) {
-      chef.profilePicture = '/chef-photos/default-profile.png';
+    if (chef.profilePicture && chef.profilePicture.startsWith('https://res.cloudinary.com/')) {
+      chef.profilePicture = '/chef-images/default-profile.png';
     }
 
     res.json({

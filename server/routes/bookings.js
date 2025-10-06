@@ -39,23 +39,6 @@ router.post('/', protect, authorize('client'), [
       });
     }
 
-    await sendNotification({
-      io,
-      recipient: req.user.id,
-      sender: req.user.id,
-      type: 'booking_created',
-      title: 'Demande de réservation envoyée',
-      message: `Votre demande a été transmise à ${chef.user?.name || 'votre chef'}.`,
-      data: {
-        bookingId: booking._id.toString(),
-        serviceType,
-        eventDate: eventDetails?.date || null,
-        isB2B: Boolean(booking.isB2B)
-      },
-      actionUrl: '/client-dashboard/bookings',
-      priority: 'medium'
-    });
-
     const { chefId, serviceType, eventDetails, location, menu = {}, specialRequests } = req.body;
 
     // Verify chef exists and is available
