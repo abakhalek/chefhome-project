@@ -77,12 +77,32 @@ const B2BMissions: React.FC = () => {
                 <div>Statut: {mission.status}</div>
               </div>
               <div className="flex space-x-3">
-                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center space-x-2"><Eye size={18} /><span>Voir Détails</span></button>
+                <button 
+                  className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors"
+                  title="Voir les détails de cette mission"
+                >
+                  <Eye size={18} />
+                  <span>Voir Détails</span>
+                </button>
                 {mission.status === 'accepted' && (
-                  <button onClick={() => handleUpdateMissionStatus(mission.id, 'completed')} className="px-4 py-2 bg-green-600 text-white rounded-lg flex items-center space-x-2"><CheckCircle size={18} /><span>Marquer comme terminée</span></button>
+                  <button 
+                    onClick={() => handleUpdateMissionStatus(mission.id, 'completed')} 
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg flex items-center space-x-2 hover:bg-green-700 transition-colors"
+                    title="Marquer cette mission comme terminée"
+                  >
+                    <CheckCircle size={18} />
+                    <span>Marquer comme terminée</span>
+                  </button>
                 )}
                 {mission.status === 'pending' && (
-                  <button onClick={() => handleUpdateMissionStatus(mission.id, 'cancelled')} className="px-4 py-2 bg-red-600 text-white rounded-lg flex items-center space-x-2"><XCircle size={18} /><span>Annuler</span></button>
+                  <button 
+                    onClick={() => handleUpdateMissionStatus(mission.id, 'cancelled')} 
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg flex items-center space-x-2 hover:bg-red-700 transition-colors"
+                    title="Annuler cette mission"
+                  >
+                    <XCircle size={18} />
+                    <span>Annuler</span>
+                  </button>
                 )}
               </div>
             </div>

@@ -60,7 +60,7 @@ const HomePage: React.FC = () => {
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
             <a
-              href="/app/chefathome-andriod.apk"
+              href="/app/chefathome-android.apk"
               download
               className="flex flex-col items-center justify-between rounded-2xl bg-white p-8 shadow-lg border border-gray-200 hover:border-orange-500 hover:shadow-xl transition"
             >

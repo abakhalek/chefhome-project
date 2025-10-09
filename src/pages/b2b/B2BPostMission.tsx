@@ -23,9 +23,53 @@ const B2BPostMission: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validation
+    if (!missionData.title.trim()) {
+      alert("Le titre de la mission est requis.");
+      return;
+    }
+    if (!missionData.description.trim()) {
+      alert("La description de la mission est requise.");
+      return;
+    }
+    if (missionData.budget <= 0) {
+      alert("Le budget doit être supérieur à 0.");
+      return;
+    }
+    if (!missionData.startDate || !missionData.endDate) {
+      alert("Les dates de début et de fin sont requises.");
+      return;
+    }
+    if (new Date(missionData.startDate) >= new Date(missionData.endDate)) {
+      alert("La date de fin doit être postérieure à la date de début.");
+      return;
+    }
+    
     setLoading(true);
     try {
-      await b2bService.postMission(missionData);
+      // Format data according to B2B API expectations
+      const formattedData = {
+        title: missionData.title,
+        description: missionData.description,
+        serviceType: 'catering', // Default B2B service type
+        eventDetails: {
+          date: missionData.startDate,
+          startTime: missionData.startTime,
+          endTime: missionData.endTime,
+          duration: 8 // Default duration for B2B missions
+        },
+        location: {
+          address: 'À définir',
+          city: 'À définir',
+          zipCode: '00000',
+          country: 'France'
+        },
+        budget: missionData.budget,
+        requirements: missionData.requiredSkills ? missionData.requiredSkills.split(',').map(skill => skill.trim()) : []
+      };
+
+      await b2bService.postMission(formattedData);
       alert("Mission publiée avec succès !");
       setMissionData({ title: '', description: '', budget: 0, requiredSkills: '', startDate: '', endDate: '', startTime: '', endTime: '', experienceLevel: 'débutant' });
     } catch (error) {
@@ -86,9 +130,18 @@ const B2BPostMission: React.FC = () => {
             </select>
           </div>
           <div className="flex justify-end">
-            <button type="submit" disabled={loading} className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold flex items-center space-x-2 disabled:opacity-50">
-              {loading ? 'Publication...' : 'Publier la Mission'}
-              <Send size={20} />
+            <button type="submit" disabled={loading} className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold flex items-center space-x-2 disabled:opacity-50 hover:bg-blue-700 transition-colors">
+              {loading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  <span>Publication...</span>
+                </>
+              ) : (
+                <>
+                  <Send size={20} />
+                  <span>Publier la Mission</span>
+                </>
+              )}
             </button>
           </div>
         </form>

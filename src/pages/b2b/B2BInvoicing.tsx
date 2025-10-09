@@ -73,10 +73,12 @@ const B2BInvoicing: React.FC = () => {
               </div>
               <button
                 onClick={() => handleDownloadInvoice(invoice.id)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center space-x-2 disabled:opacity-50"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center space-x-2 disabled:opacity-50 hover:bg-blue-700 transition-colors"
                 disabled={downloadingId === invoice.id}
+                title="Télécharger cette facture en PDF"
               >
-                <Download size={18} /><span>{downloadingId === invoice.id ? 'Téléchargement...' : 'Télécharger'}</span>
+                <Download size={18} />
+                <span>{downloadingId === invoice.id ? 'Téléchargement...' : 'Télécharger'}</span>
               </button>
             </div>
           ))}

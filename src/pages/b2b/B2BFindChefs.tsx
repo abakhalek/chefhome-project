@@ -97,9 +97,23 @@ const B2BFindChefs: React.FC = () => {
     fetchChefs(newPage);
   };
 
-  const handleSelectChef = (chef: PublicChefSummary) => {
-    alert(`Chef ${chef.name} sélectionné pour une mission B2B. (Fonctionnalité d'attribution à implémenter)`);
-    // Here you would typically navigate to a mission assignment page or open a modal
+  const handleSelectChef = async (chef: PublicChefSummary) => {
+    if (window.confirm(`Voulez-vous sélectionner le chef ${chef.name} pour votre prochaine mission B2B ?`)) {
+      try {
+        // Here you would typically open a modal to create a mission with this chef
+        // For now, we'll show a success message
+        alert(`Chef ${chef.name} sélectionné ! Vous pouvez maintenant créer une mission pour ce chef.`);
+        
+        // In a real implementation, you would:
+        // 1. Open a modal to create a mission
+        // 2. Pre-fill the chef selection
+        // 3. Navigate to mission creation form
+        // navigate('/b2b-dashboard/missions/new', { state: { selectedChef: chef } });
+      } catch (error) {
+        console.error('Error selecting chef:', error);
+        alert('Erreur lors de la sélection du chef.');
+      }
+    }
   };
 
   return (

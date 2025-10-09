@@ -20,7 +20,7 @@ const LogicielPage: React.FC = () => {
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <a
-              href="/app/chefathome-andriod.apk"
+              href="/app/chefathome-android.apk"
               download
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-green-600 px-6 py-3 font-semibold text-white shadow-lg hover:bg-green-700 transition"
             >

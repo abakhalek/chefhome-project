@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { chefService } from '../../services/chefService';
 import { Menu } from '../../types';
 import { Plus, Edit, Trash2, Camera } from 'lucide-react';
 
 const ChefMenus: React.FC = () => {
+  const navigate = useNavigate();
   const [menus, setMenus] = useState<Menu[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -113,11 +114,19 @@ const ChefMenus: React.FC = () => {
                 </span>
               </div>
               <div className="flex space-x-2">
-                <button onClick={() => {}} className="flex-1 bg-blue-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-600 transition-colors flex items-center justify-center space-x-2">
+                <button 
+                  onClick={() => navigate(`/chef-dashboard/menus/${menu.id}/edit`)} 
+                  className="flex-1 bg-blue-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-600 transition-colors flex items-center justify-center space-x-2"
+                  title="Modifier cette offre"
+                >
                   <Edit className="h-4 w-4" />
                   <span>Modifier</span>
                 </button>
-                <button onClick={() => handleDelete(menu.id)} className="bg-red-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-red-600 transition-colors">
+                <button 
+                  onClick={() => handleDelete(menu.id)} 
+                  className="bg-red-500 text-white py-2 px-4 rounded-lg font-medium hover:bg-red-600 transition-colors"
+                  title="Supprimer cette offre"
+                >
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>

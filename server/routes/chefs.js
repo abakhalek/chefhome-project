@@ -665,7 +665,23 @@ router.get('/', async (req, res) => {
     const sortDirection = sortOrder === 'asc' ? 1 : -1;
     const sortOptions = { [sortByValue]: sortDirection };
 
-    const pipeline = [
+    // First get total count for pagination
+    const totalCountPipeline = [
+      { $match: query },
+      {
+        $group: {
+          _id: '$user',
+          doc: { $first: '$$ROOT' }
+        }
+      },
+      { $count: 'count' }
+    ];
+
+    const totalCountResult = await Chef.aggregate(totalCountPipeline);
+    const total = totalCountResult?.[0]?.count || 0;
+
+    // Then get the paginated data
+    const dataPipeline = [
       { $match: query },
       { $sort: sortOptions },
       {
@@ -675,26 +691,11 @@ router.get('/', async (req, res) => {
         }
       },
       { $replaceRoot: { newRoot: '$doc' } },
-      {
-        $facet: {
-          data: [
-            { $skip: (pageNumber - 1) * limitNumber },
-            { $limit: limitNumber }
-          ],
-          totalCount: [
-            { $count: 'count' }
-          ]
-        }
-      }
+      { $skip: (pageNumber - 1) * limitNumber },
+      { $limit: limitNumber }
     ];
 
-    const aggregateResult = await Chef.aggregate(pipeline);
-    const facetResult = aggregateResult?.[0] || { data: [], totalCount: [] };
-
-    const rawChefs = Array.isArray(facetResult.data) ? facetResult.data : [];
-    const total = Array.isArray(facetResult.totalCount) && facetResult.totalCount[0]?.count
-      ? facetResult.totalCount[0].count
-      : 0;
+    const rawChefs = await Chef.aggregate(dataPipeline);
 
     const populatedChefs = await Chef.populate(rawChefs, {
       path: 'user',

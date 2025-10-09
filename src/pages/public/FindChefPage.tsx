@@ -286,16 +286,21 @@ const FindChefPage: React.FC = () => {
   const fetchChefs = useCallback(async (page = 1) => {
     setLoading(true);
     try {
-      const params = {
+      // Build params object, only including defined values
+      const params: Record<string, any> = {
         page,
-        limit: 10,
-        serviceType: filterServiceType || undefined,
-        cuisineType: cuisineType || undefined,
-        city: city || undefined,
-        minPrice: minPrice || undefined,
-        maxPrice: maxPrice || undefined,
-        rating: minRating || undefined
+        limit: 10
       };
+
+      if (filterServiceType) params.serviceType = filterServiceType;
+      if (cuisineType) params.cuisineType = cuisineType;
+      if (city) params.city = city;
+      if (minPrice) params.minPrice = minPrice;
+      if (maxPrice) params.maxPrice = maxPrice;
+      if (minRating) params.rating = minRating;
+
+      console.log('[FindChefPage] Fetching chefs with params:', params);
+      
       const { chefs: fetchedChefs, pagination } = await chefService.getChefs(params);
       const source: Chef[] = Array.isArray(fetchedChefs) ? (fetchedChefs as Chef[]) : [];
       console.log('[FindChefPage] Fetched chefs:', source);
@@ -318,6 +323,8 @@ const FindChefPage: React.FC = () => {
       setPagination(pagination);
     } catch (error) {
       console.error('Failed to fetch chefs:', error);
+      setChefs([]);
+      setPagination({ page: 1, limit: 10, total: 0, pages: 1 });
     } finally {
       setLoading(false);
     }
@@ -592,7 +599,22 @@ const FindChefPage: React.FC = () => {
 
         {/* Filters Section */}
         <div className="bg-white rounded-2xl shadow-lg p-4 md:p-6 mb-8">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">Filtres Personnalisés</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-gray-800">Filtres Personnalisés</h2>
+            <button
+              onClick={() => {
+                setFilterServiceType('');
+                setCuisineType('');
+                setCity('');
+                setMinPrice('');
+                setMaxPrice('');
+                setMinRating('');
+              }}
+              className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+            >
+              Réinitialiser les filtres
+            </button>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <select value={filterServiceType} onChange={(e) => setFilterServiceType(e.target.value)} className="p-3 border rounded-lg">
               <option value="">Type de Prestation</option>
@@ -769,11 +791,25 @@ const FindChefPage: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-gray-700 text-sm font-bold mb-2">Date</label>
-                      <input type="date" value={bookingDetails.date} onChange={(e) => setBookingDetails({ ...bookingDetails, date: e.target.value })} className="w-full p-3 border rounded-lg" required />
+                      <input 
+                        type="date" 
+                        value={bookingDetails.date} 
+                        onChange={(e) => setBookingDetails({ ...bookingDetails, date: e.target.value })} 
+                        className="w-full p-3 border rounded-lg" 
+                        required 
+                        min={new Date().toISOString().split('T')[0]}
+                      />
                     </div>
                     <div>
                       <label className="block text-gray-700 text-sm font-bold mb-2">Heure</label>
-                      <input type="time" value={bookingDetails.time} onChange={(e) => setBookingDetails({ ...bookingDetails, time: e.target.value })} className="w-full p-3 border rounded-lg" required />
+                      <input 
+                        type="time" 
+                        value={bookingDetails.time} 
+                        onChange={(e) => setBookingDetails({ ...bookingDetails, time: e.target.value })} 
+                        className="w-full p-3 border rounded-lg" 
+                        required 
+                        step="900"
+                      />
                     </div>
                   </div>
 
@@ -992,7 +1028,12 @@ const FindChefPage: React.FC = () => {
                     {bookingQuote.menu && (
                       <p><strong>Menu :</strong> {bookingQuote.menu.name}</p>
                     )}
-                    <p><strong>Date de l'évènement :</strong> {bookingDetails.date ? new Date(bookingDetails.date).toLocaleDateString('fr-FR') : '—'} à {bookingDetails.time}</p>
+                    <p><strong>Date de l'évènement :</strong> {bookingDetails.date ? new Date(bookingDetails.date).toLocaleDateString('fr-FR', { 
+                      weekday: 'long', 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    }) : '—'} à {bookingDetails.time}</p>
                     {bookingQuote.calculation?.method === 'menu' && bookingQuote.calculation.menu ? (
                       <p><strong>Participants :</strong> {bookingQuote.calculation.menu.guests}</p>
                     ) : null}
